@@ -1,0 +1,16 @@
+bottleneck,variable,mean,lower,upper
+monoculture,Sensitive,0.020833333,0,0.067720066
+monoculture,SM,0.090277778,0.009996943,0.170558612
+monoculture,CRISPR,0.8888889,0.77177464,1
+50-clone,Sensitive,0.027777778,0,0.07466451
+50-clone,SM,0.044526144,0,0.124806978
+50-clone,CRISPR,0.927696079,0.81058183,1
+5-clone,Sensitive,0.048611111,0.001724378,0.095497844
+5-clone,SM,0.041666667,0,0.121947501
+5-clone,CRISPR,0.909722222,0.792607973,1
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,

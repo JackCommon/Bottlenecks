@@ -1,0 +1,4 @@
+bottleneck,variable,mean,lower,upper
+monoculture,number,1.021,0.864,1.194
+5-clone,number,1.333,1.153,1.531
+50-clone,number,1.559,1.358,1.778

@@ -1,0 +1,1357 @@
+---
+title: "Bottleneck analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# In the console, set the working directory to the culture experiment folder
+setwd('~/Documents/OneDrive - University of Exeter/Data/Bottlenecks/Phage_bn_exp/data/')
+#setwd('~/OneDrive/Data/Bottlenecks/')
+```
+
+```{r Packages, warning=FALSE, messsage=FALSE, error=FALSE}
+# Packages used in this analysis
+library(ggplot2)
+library(scales)
+library(reshape2)
+library(dplyr)
+library(tidyr)
+library(magrittr)
+```
+
+```{r Stats functions}
+# Extracts the intercept coefficient (mean) and 95% CIs from the GLM objects, with added functionality to copy those to the clipboard for easier input to summary dataframes
+
+# Enable this if using Ubuntu
+#clipboard <- function(x, sep="\t", row.names=FALSE, col.names=FALSE){
+ #    con <- pipe("xclip -selection clipboard -i", open="w")
+ #    write.table(x, con, sep=sep, row.names=row.names, col.names=col.names)
+ #    close(con)
+#}
+
+model_stats = function(model){
+  sum = coef(model)
+  conf = confint(model, level=c(0.95))
+  print(c(sum[1]))
+  print(c(conf[1,1]))
+  print(c(conf[1,2]))
+  
+  stats = data.frame(conf[1,1], conf[1,2])
+  #clipboard(stats)
+  clip = pipe('pbcopy', 'w')
+  write.table(stats, file=clip, sep='\t', row.names = F, col.names = F)
+  close(clip)
+  print('Coefficients copied to the clipboard')
+  
+}
+
+CopyCIs <- function(model){
+  conf = logit2prob(confint(model, level=c(0.95)))
+  print(c(conf[1,1]))
+  print(c(conf[1,2]))
+  CIs <- data.frame(conf[1,1], conf[1,2])
+  
+  #clipboard(CIs)
+  clip = pipe('pbcopy', 'w')
+  write.table(CIs, file=clip, sep='\t', row.names = F, col.names = F)
+  close(clip)
+  print('Probability 95% CIs copied to the clipboard')
+  
+}
+
+## Compare AIC values for model fit
+# This function extracts the AIC for each GLM, and then compares the absolute relative differences for each AIC to the model with the lowest AIC. This acts as a measure of model fit. More can be found at: http://faculty.washington.edu/skalski/classes/QERM597/papers_xtra/Burnham%20and%20Anderson.pdf
+
+compare_AICs = function(df){          # df is a dataframe of AIC values 
+  print(df)                           # prints the origina AIC values 
+  col_len = length(df[,2])            # extracts the number of number of models
+  AIC_min = abs(min(df[,2]))          # finds the minimum AIC value
+  for (i in seq(1, col_len, 1)){      # loop through the AIC values and prints the absolute differences from AIC_min
+    print( (abs(df[i,2])) - AIC_min)
+  }
+}
+
+## Pseudo-R2 from residual and null deviance
+# Although there are many ways of extracting an R2 from a GLM, two are used here. For GLMs with a normal error distribution, I use a simple calculation of residual.deviance/null.deviance. For logistic regressions (i.e. a binomial error structure), I use McFadden's pseudo-R2 (1-log likelihood(model)/log likelihood(null model)) [see Hosmer et al. (2013) "Applied Logistic Regression" 3rd ed.]
+
+pseudo_R2 = function(test.model, null.model){
+  if (test.model$family$family == 'gaussian'){
+    print(test.model$formula, quote = F)
+    print('McFadden\'s pseudo-R2 for normally-distributed data:', quote=F)
+    print( (test.model$deviance/test.model$null.deviance) , quote = F)
+  }
+  if (test.model$family == 'binomial'){
+    print(test.model$formula, quote=F)
+    print('McFadden\'s pseudo-R2 for logistic regression:', quote=F)
+    print( (1-logLik(test.model)/logLik(null.model) ), quote=F)
+  }
+  if (test.model$family == 'poisson'){
+    print(test.model$formula, quote=F)
+    print('McFaddens\'s pseudo-R2:', quote=F)
+    print( (test.model$deviance/test.model$df.residual), quote =F)
+    print('Ratio of deviance to residual DF (to check fit to (quasi)poisson distribution):', quote=F)
+    print( test.model$null.deviance/test.model$deviance, quote=F)
+  }
+}
+
+### Convert log-odds to probabilities from binomial GLM output
+logit2prob <- function(logit){
+  odds <- exp(logit)
+  prob <- odds / (1 + odds)
+  return(prob)
+}
+
+```
+
+```{r Graphing functions, include=FALSE}
+## Functions and graphical stuff
+# Next I've written some of simple functions that make the graph labels more human-readable. There are also some objects that enable these functions to work properly. *Importantly*, there are different ones for the different experiments, which have been indicated in the comments.
+
+# Lists of the original names (as found in the source data) of the levels of each factor. These are used for the breaks() function in ggplots
+
+# The original genotype names are share across the experiments
+OG_genotypes = c('prop.CRISPR', 'prop.SM', 'prop.Sensitive')
+genotype_names_facet = list(
+  'prop.CRISPR' = 'CRISPR',
+  'prop.Sensitive' = 'SM',
+  'prop.SM' = 'Sensitive'
+)
+
+genotype_names_legend = c('CRISPR', 'SM', 'Sensitive')
+
+genotype_labeller = function(variable, value) {
+  return(genotype_names_facet[value])
+}
+
+## Timepoints are shared across experiments
+OG_timepoints = c('t0', 't1', 't2', 't3', 't4', 't5')
+
+timepoint_names_facet = list(
+  't0' = '0 d.p.i.',
+  't1' = '1 d.p.i.',
+  't2' = '2 d.p.i.',
+  't3' = '3 d.p.i.',
+  't4' = '4 d.p.i.',
+  't5' = '5 d.p.i.'
+)
+
+timepoint_names_legend = c('0', '1', '2', '3', '4', '5')
+
+timepoint_labeller = function(variable, value) {
+  return(timepoint_names_facet[value])
+}
+
+### EXPERIMENTS 1 & @
+## Experiments 1 & 2 had the same bottleneck treatments ('sol' is short for 'solution')
+sol_OG_bottleneck = c('2', '3', '4', '5', '6','7', '8', '9')
+
+# The new label objects need a list() for when they apply to facet headers (strip.text), and a vector when they apply to legend labels or axis text
+sol_bottleneck_names_facet = list(
+  '2'      = expression('10'^-2*''),
+  '3'     = expression('10'^-3*''),
+  '4'    = expression('10'^-4*''),
+  '5'   =  expression('10'^-5*''),
+  '6'  = expression('10'^-6*''),
+  '7' = expression('10'^-7*''),
+  '8' = expression('10'^-8*''),
+  '9' = expression('10'^-9*'')
+)
+
+sol_bottleneck_names_legend = c(
+  expression('10'^-2*''), 
+  expression('10'^-3*''), 
+  expression('10'^-4*''),
+  expression('10'^-5*''),
+  expression('10'^-6*''),
+  expression('10'^-7*''),
+  expression('10'^-8*''),
+  expression('10'^-9*'')
+)
+
+
+# The functions which set these up
+sol_bottleneck_labeller = function(variable, value) {
+  return(sol_bottleneck_names_facet[value])
+}
+
+### EXPERIMENT 3
+
+# These vectors just give tidy labels for the figures for experiment 3
+monoculture_IDs = c('M.1', 'M.2', 'M.3', 'M.4', 'M.5', 'M.6')
+fiveclone_IDs = c('5.1', '5.2', '5.3', '5.4', '5.5', '5.6')
+fiftyclone_IDs = c('50.1', '50.2', '50.3', '50.4', '50.5', '50.6')
+
+plate_replicate_names_legend = c('1', '2', '3', '4', '5', '6')
+
+plate_OG_bottleneck = c('monoculture', '5-clone', '50-clone')
+
+plate_bottleneck_names_facet = list(
+  'monoculture'      = expression('Monoculture'),
+  '5-clone'          = expression('5-clone'),
+  '50-clone'         = expression('50-clone')
+)
+
+plate_bottleneck_names_legend = c(
+  expression('Monoculture'), 
+  expression('5-clone'), 
+  expression('50-clone')
+)
+
+# Function for experiment 3 bottleneck labelling
+plate_bottleneck_labeller = function(variable, value) {
+  return(plate_bottleneck_names_facet[value])
+}
+
+## Finally, a little ggplot object that makes the position of geoms more sensible
+
+pd = position_dodge(0.1)
+
+``` 
+
+--- Experiment 1: Phage data
+```{r Exp1 Load phage data}
+phage <- read.csv("Full_bn_2/data/counts/bottleneck_bac_phage.csv", header=T)
+phage <- select(phage, -cfu)
+phage %<>% na.exclude
+phage$ID %<>% as.factor
+phage$bottleneck %<>% as.factor
+#phage$pfu %<>% +1
+#phage$log.pfu <- log10(phage$pfu)
+#phage <- phage %>% 
+#  group_by(bottleneck, timepoint) %>% 
+#  mutate(weights=1/( (sd(log.pfu)/sqrt(6) ) +1 ))
+
+#range(phage$weights)
+```
+
+```{r Exp1 phage models}
+library(MASS)
+
+mod.null <- glm.nb(pfu~1, data=phage, link="log")
+mod.null$deviance/mod.null$df.residual
+
+mod.1 <- glm.nb(pfu~bottleneck, data=phage, link="log")
+mod.1$deviance/mod.1$df.residual
+
+mod.2 <- glm.nb(pfu~timepoint, data=phage, link="log")
+mod.2$deviance/mod.2$df.residual
+
+mod.3 <- glm.nb(pfu~bottleneck*timepoint, data=phage, link="log")
+1-pchisq(mod.3$deviance, mod.3$df.residual)
+
+# The global negative binomial model is overdispersed, but it is a much lower overdispersion compared to a poisson family, and a better fit than to a normal distribution
+
+AIC(mod.null, mod.1, mod.2, mod.3) %>% compare_AICs()
+
+par(mfrow=c(2,2))
+plot(mod.3)
+
+anova(mod.null, mod.1, mod.2, mod.3, test="Chisq")
+
+summary(mod.3)
+```
+
+```{r Exp1 get model coeefs}
+phage$timepoint %<>% relevel(., ref="t5")
+phage$timepoint %<>% relevel(., ref="t4")
+phage$timepoint %<>% relevel(., ref="t3")
+phage$timepoint %<>% relevel(., ref='t2')
+phage$timepoint %<>% relevel(., ref='t1')
+phage$timepoint %<>% relevel(., ref='t0')
+
+detach("package:MASS")
+bottleneck <- as.character(c(seq(2,9,1)))
+timepoints = c( rep("t0", 8),
+                rep("t1", 8),
+                rep("t2", 8),
+                rep("t3", 8),
+                rep("t4", 8),
+                rep("t5", 8))
+
+tab <- model.tables(aov(mod.3), "mean")
+tab1 <- as.matrix.data.frame(tab$tables$`bottleneck:timepoint`)
+coef.df <- data.frame(bottleneck = bottleneck,tab1[,1], tab1[,2], tab1[,3], tab1[,4], tab1[,5], tab1[,6])
+
+coef.df <- melt(coef.df, id.vars = c("bottleneck"))
+coef.df %<>% select(-variable)
+coef.df$timepoint <- timepoints
+
+p <- predict(mod.3, newdata=phage, type = "response", se.fit = T)
+upr <- with(p, fit + (1.96*se.fit))
+lwr <- with(p, fit - (1.96*se.fit))
+CIs <- data.frame(lwr, upr) %>% distinct()
+
+upr <- rep(CIs[36,2], 12)
+lwr <- rep(CIs[36,1], 12)
+app <- data.frame(lwr, upr)
+CIs <- bind_rows(CIs, app)
+
+coef.df$lower = CIs$lwr
+coef.df$upper = CIs$upr
+
+coef.df$timepoint %<>% as.factor
+```
+
+```{r Exp1 phage sum fig}
+exp1_phage_sum <- read.csv("./Full_bn_2/data/counts/counts_summary_nbinom.csv")
+exp1_phage_sum$bottleneck %<>% as.factor
+
+exp1_phage_sum_plot <- ggplot(data=exp1_phage_sum, aes(x=bottleneck, y=log10.mean))+
+  
+  geom_bar(stat="identity", size=4, position=pd)+
+  geom_errorbar(aes(ymin=log10.lower, ymax=log10.upper), width=0.2, size=0.7, position=pd)+
+  facet_wrap(~timepoint, labeller=timepoint_labeller)+
+  
+  labs(x='Bottleneck size', y=expression(bold("Log"*{}[bold("10")]*" p.f.u ml"*{}^{-1}*"")))+
+  #ggtitle("Summary of phage and bacterial titers in evolution bottleneck experiment")+
+  
+  theme_bw()+
+  theme(legend.key.size = unit(0.5, 'cm'))+
+  theme(plot.title = element_text(face="bold", hjust=0.5, size = 16))+
+  theme(axis.title = element_text(face="bold", size=20))+
+  
+  theme(axis.text = element_text(size=14))+
+  theme(strip.text = element_text(size=16))+
+  theme(legend.key.width  = unit(1.3, 'cm'))+
+  
+  scale_x_discrete(breaks=sol_OG_bottleneck, labels=sol_bottleneck_names_legend)+
+  scale_y_continuous(breaks=c(seq(0,15,1)))+
+  
+  theme(legend.position = 'none')
+  
+  #scale_y_continuous(trans = 'log10',
+  #                  breaks = trans_breaks("log10", function(x) 10^x),
+  #                  labels = trans_format("log10", math_format(10^.x)),
+  #                   limits = c(NA,5e+12))
+exp1_phage_sum_plot
+```
+
+--- Experiment 1: Phenotype data
+```{r Exp1 pheno data}
+pheno <- read.csv('./Full_bn_2/data/phenotype/phenotype_prop.csv', header=T)
+pheno %<>% na.exclude()
+pheno$Bottleneck %<>% as.factor()
+pheno <- melt(pheno, measure.vars = c('CRISPR', 'SM', 'Sensitive'))
+
+```
+
+```{r Exp1 pheno analysis}
+# Interested in the proportion of each phenotype in each bottleneck treatment, so the models use a binomial distribution with a logit link
+mod.null <- glm(value~1, data=pheno, family=binomial)
+mod.1 <- glm(value~Bottleneck, data=pheno, family=binomial)
+mod.2 <- glm(value~variable, data=pheno, family=binomial)
+mod.g <- glm(value~Bottleneck*variable, data=pheno, family=binomial)
+
+# Compare using delta-AIC to get K-L values
+AIC(mod.null, mod.1, mod.2, mod.g) %>% compare_AICs()
+
+# And check R2 
+pseudo_R2(mod.1, mod.null)
+pseudo_R2(mod.2, mod.null)
+pseudo_R2(mod.g, mod.null)
+
+# Likelihood test
+anova(mod.g, test="Chisq")
+
+# Summarise the global model
+summary(mod.g)
+
+# Check dispersion against the Chis-squared distribution
+1- pchisq(mod.g$deviance, mod.g$df.residual)
+# Not signficantly underdispered
+```
+
+```{r Get exp1 pheno coefficients}
+model.tables(aov(mod.g), "mean")
+
+pheno$Bottleneck %<>% relevel(., ref="9")
+pheno$Bottleneck %<>% relevel(., ref="8")
+pheno$Bottleneck %<>% relevel(., ref="7")
+pheno$Bottleneck %<>% relevel(., ref='6')
+pheno$Bottleneck %<>% relevel(., ref='5')
+pheno$Bottleneck %<>% relevel(., ref='4')
+pheno$Bottleneck %<>% relevel(., ref='3')
+pheno$Bottleneck %<>% relevel(., ref='2')
+
+pheno$variable %<>% relevel(ref="CRISPR")
+pheno$variable %<>% relevel(ref="SM")
+pheno$variable %<>% relevel(ref="Sensitive")
+
+mod.g <- glm(value~Bottleneck*variable, data=pheno, family=binomial)
+#summary(mod.g)
+suppressWarnings( logit2prob(confint(mod.g)) )
+confint(mod.g)
+```
+
+--- Experiment 1: Spacer data
+```{r Exp1 Load spacer data}
+exp1_spacer <- read.csv('Full_bn_2/data/PCR/spacer_all.csv')
+exp1_spacer$Bottleneck %<>% as.factor()
+exp1_spacer %<>% filter(Total.spacers > 0)
+exp1_spacer %<>% select(-Zero)
+```
+
+```{r Exp1 Spacer models}
+# The spacer data is made up of counts, so an a priori approach suggests that a poisson distribution with an identity link will be appropriate
+mod.null <- glm(Total.spacers ~ 1, data=exp1_spacer, family=poisson(link="identity"))
+summary(mod.null)
+pseudo_R2(mod.null, mod.null)
+
+mod.g <- glm(Total.spacers~Bottleneck, data=exp1_spacer, family=poisson(link="identity"))
+summary(mod.g)
+confint(mod.g)
+
+AIC(mod.null, mod.g) %>% compare_AICs()
+pseudo_R2(mod.g, mod.null)
+1- pchisq(mod.g$deviance, mod.g$df.residual)
+anova(mod.null, mod.g, test="LRT")
+
+# deviance/residual DF ratio is very close to one, which suggests that overdispersion is limited and that the Poisson distribution is a appropriate. K-L of the global model is also good, suggesting that mod.g is a good estimating model
+```
+
+```{r Exp1 get spacer model coefs}
+model.tables(aov(mod.g), "mean")
+
+exp1_spacer$Bottleneck %<>% relevel(., ref="9")
+exp1_spacer$Bottleneck %<>% relevel(., ref="8")
+exp1_spacer$Bottleneck %<>% relevel(., ref="7")
+exp1_spacer$Bottleneck %<>% relevel(., ref='6')
+exp1_spacer$Bottleneck %<>% relevel(., ref='5')
+exp1_spacer$Bottleneck %<>% relevel(., ref='4')
+exp1_spacer$Bottleneck %<>% relevel(., ref='3')
+exp1_spacer$Bottleneck %<>% relevel(., ref='2')
+
+mod.g <- glm(Total.spacers~Bottleneck, data=exp1_spacer, family=poisson(link="identity"))
+confint(mod.g)
+```
+
+```{r Exp1 Spacer proportion models}
+exp1_spacer <- melt(exp1_spacer, measure.vars = c("One", "Two", "Three", "Four", "FiveOrMore"))
+
+mod.1 <- glm(value~variable*Bottleneck, data=exp1_spacer, family = binomial())
+1 - pchisq(mod.1$deviance, mod.1$df.residual)
+
+summary(mod.1)
+model.tables(aov(mod.1), "mean")
+```
+
+```{r Exp1 Spacer proportion coefficients}
+exp1_spacer$Bottleneck %<>% relevel(ref="9")
+exp1_spacer$Bottleneck %<>% relevel(ref="8")
+exp1_spacer$Bottleneck %<>% relevel(ref="7")
+exp1_spacer$Bottleneck %<>% relevel(ref="6")
+exp1_spacer$Bottleneck %<>% relevel(ref="5")
+exp1_spacer$Bottleneck %<>% relevel(ref="4")
+exp1_spacer$Bottleneck %<>% relevel(ref="3")
+exp1_spacer$Bottleneck %<>% relevel(ref="2")
+
+exp1_spacer$variable %<>% relevel(ref="FiveOrMore")
+exp1_spacer$variable %<>% relevel(ref="Four")
+exp1_spacer$variable %<>% relevel(ref="Three")
+exp1_spacer$variable %<>% relevel(ref="Two")
+exp1_spacer$variable %<>% relevel(ref="One")
+
+mod.1 <- glm(value~variable*Bottleneck, data=exp1_spacer, family = binomial())
+suppressWarnings( logit2prob(confint(mod.1)))
+
+```
+
+```{r Exp1 Spacer proportion summary graph }
+exp1.spacer.prop.sum <- read.csv("./Full_bn_2/data/PCR/spacer_proportion_summary.csv", header=T) 
+exp1.spacer.prop.sum$Bottleneck %<>% as.factor
+
+plot1 <- ggplot(aes(y=mean, x=Spacer.Number), data=exp1.spacer.prop.sum)+
+  geom_bar(stat="identity", position=position_dodge(1))+
+  geom_point(position = position_dodge(1))+
+  geom_errorbar(aes(ymin=lower, ymax=upper), position = position_dodge(1), width=0.3, size=0.7)+
+  theme_bw()+
+  facet_wrap(~Bottleneck)
+
+plot1
+```
+
+```{r Exp1 Binary models}
+exp1_spacer %<>% select(ID, Bottleneck, Single, Multiple)
+exp1_spacer <- melt(exp1_spacer, measure.vars = c("Single", "Multiple"))
+
+mod.null <- glm(value~1, data=exp1_spacer, family=binomial)
+mod.1 <- glm(value~Bottleneck, data=exp1_spacer, family=binomial)
+mod.2 <- glm(value~variable, data=exp1_spacer, family=binomial)
+mod.g <- glm(value~Bottleneck*variable, data=exp1_spacer, family=binomial)
+
+AIC(mod.null, mod.1, mod.2, mod.g) %>% compare_AICs()
+
+anova(mod.null, mod.1, mod.2, mod.g, test="LRT")
+
+1 - pchisq(mod.g$deviance, mod.g$df.residual)
+summary(mod.g)
+
+model.tables(aov(mod.g), "mean")
+```
+
+```{r Exp1 binary model coefs}
+exp1_spacer$Bottleneck %<>% relevel(ref="9")
+exp1_spacer$Bottleneck %<>% relevel(ref="8")
+exp1_spacer$Bottleneck %<>% relevel(ref="7")
+exp1_spacer$Bottleneck %<>% relevel(ref="6")
+exp1_spacer$Bottleneck %<>% relevel(ref="5")
+exp1_spacer$Bottleneck %<>% relevel(ref="4")
+exp1_spacer$Bottleneck %<>% relevel(ref="3")
+exp1_spacer$Bottleneck %<>% relevel(ref="2")
+
+exp1_spacer$variable %<>% relevel(ref="Single")
+exp1_spacer$variable %<>% relevel(ref="Multiple")
+
+
+mod.g <- glm(value~Replicate*Bottleneck*variable, data=exp1_spacer, family=binomial)
+suppressWarnings( CopyCIs(mod.g) )
+```
+
+
+--- Experiment 2: Phage data
+```{r Exp2 Phage Data}
+# Load in the bacteria-phage count data and remove the CFU measurements
+phage = read.csv("./Phage_bn_exp/data/counts/counts_master_csv.csv", header=T)
+phage %<>% select(., -cfu)
+#set the bottleneck treatment as a factor
+phage$bottleneck %<>% as.factor()
+phage$ID %<>% as.factor()
+
+# make new columns in the data for log-transformed pfu and cfu counts
+# adds one to account for zero values
+phage$pfu %<>% + 1
+phage$log.pfu <- log10(phage$pfu)
+
+## Add in the weights for each bottleneck in each timepoint
+phage <- phage %>% 
+  group_by(bottleneck, timepoint) %>% 
+  mutate(weights=1/( (sd(log.pfu)/sqrt(6) ) +1 ))
+
+#phage <- phage %>% 
+ # filter(log.pfu > 0)
+
+# Take a look at the range of weight values to see if they need to be included in models
+range(phage$weights)
+
+```
+
+```{r Exp2 Phage models, warning=FALSE}
+##### MODELS
+
+# Make GLMs that are nested versions of each other
+mod_null = glm(log.pfu~1, weights=weights, data=phage)
+mod_1 = glm(log.pfu~bottleneck, weights=weights, data=phage)
+mod_2 = glm(log.pfu~timepoint, weights=weights, data=phage)
+mod_3 = glm(pfu~bottleneck*timepoint, weights=weights, data=phage, family=gaussian(link='log'))
+
+# Check residual variance for normality and heteroscedacity using the model plots
+par(mfrow=c(2,2))
+plot(mod_3)
+
+# Perform a likelihood-ratio test (LRT) to check goodness-of-fit
+anova(mod_null, mod_1, mod_2, mod_3, test='Chisq')
+# And compare this with an AIC comparison
+mod_AICs = AIC(mod_null, mod_1, mod_2, mod_3)
+compare_AICs(mod_AICs)
+# Finally, get the pseudo-R2 for each model
+pseudo_R2(mod_1)
+pseudo_R2(mod_2)
+pseudo_R2(mod_3)
+
+# From the model checking procedures, it is clear that the full model (log.pfu~bottleneck*timepoint) explains most of the variation in the data. The LRT indicates a strong interaction effect of bottleneck*timepoint, supported by the AIC comparisons. The pseudo-R2 value is the lowest in this model, likely due to unequal between-treatment variance.  
+
+```
+
+```{r Exp2 Phage values, include=FALSE}
+phage$bottleneck %<>% relevel(., ref="9")
+phage$bottleneck %<>% relevel(., ref="8")
+phage$bottleneck %<>% relevel(., ref="7")
+phage$bottleneck %<>% relevel(., ref='6')
+phage$bottleneck %<>% relevel(., ref='5')
+phage$bottleneck %<>% relevel(., ref='4')
+phage$bottleneck %<>% relevel(., ref='3')
+phage$bottleneck %<>% relevel(., ref='2')
+
+phage$timepoint %<>% relevel(., ref='t5')
+phage$timepoint %<>% relevel(., ref='t4')
+phage$timepoint %<>% relevel(., ref='t3')
+phage$timepoint %<>% relevel(., ref='t2')
+phage$timepoint %<>% relevel(., ref='t1')
+phage$timepoint %<>% relevel(., ref='t0')
+
+mod_3 = glm(log.pfu~bottleneck*timepoint, weights=weights, data=phage)
+summary(mod_3)
+#confint(mod_3)
+model_stats(mod_3)
+
+```
+
+--- Experiment 2: Phenotype data 
+```{r Exp2 pheno data}
+pheno <- read.csv('./Phage_bn_exp/data/phenotype/phenotype_prop.csv', header=T)
+pheno %<>% na.exclude()
+pheno %<>% select(-Phenotype)
+pheno <- melt(pheno, measure.vars = c('CRISPR', 'SM', 'Sensitive'))
+
+```
+
+
+
+```{r Exp2 pheno analysis}
+# Interested in the proportion of each phenotype in each bottleneck treatment, so the models use a binomial distribution with a logit link
+mod.null <- glm(value~1, data=pheno, family=binomial)
+mod.1 <- glm(value~Bottleneck, data=pheno, family=binomial)
+mod.2 <- glm(value~variable, data=pheno, family=binomial)
+mod.g <- glm(value~Bottleneck*variable, data=pheno, family=binomial)
+
+# Compare using delta-AIC to get K-L values
+AIC(mod.null, mod.1, mod.2, mod.g) %>% compare_AICs()
+
+# And check R2 
+pseudo_R2(mod.1, mod.null)
+pseudo_R2(mod.2, mod.null)
+pseudo_R2(mod.g, mod.null)
+
+# Likelihood test
+anova(mod.g, test = "Chisq")
+
+# Summarise the global model
+summary(mod.g)
+
+# Check dispersion against the Chis-squared distribution
+mod.g$deviance/mod.g$df.residual
+pchisq(summary(mod.g)$dispersion * mod.g$df.residual, mod.g$df.residual, lower=F)
+# Not signficantly underdispered
+
+# All together, the global model with a binomial distribution is a good approximating model for this data. The LRT indicates there is an interaction between genotype and bottleneck 
+
+# Significant main effect of bottlenecking on CRISPR and Sensitives, but not on SMs
+# Individual coefficients and CIs can be derived by relevelling the dataframe and re-running the model (see chunk 'Get pheno coefficients')
+```
+
+```{r Exp2 Phenotype as a function of phage}
+## Look at the pfu as a functino of the proportion of each phenotype in each bottleneck
+# Add the phage data for t=3 to the phenotype data
+
+pheno <- subset(phage, timepoint=='t3') %>%
+  select(., contains("log.pfu")) %>% 
+  bind_cols(pheno, .) %>% 
+  na.exclude()
+
+pheno_noeight <- pheno %>% 
+  filter(., bottleneck!='8')
+
+mod_p3_null <- glm(log.pfu~1, data=pheno_noeight)
+
+mod_S_p1 <- glm(log.pfu~prop.Sensitive, data=pheno_noeight)
+mod_S_p2 <- glm(log.pfu~prop.Sensitive*bottleneck, data=pheno_noeight)
+
+mod_SM_p1 <- glm(log.pfu~prop.SM, data=pheno_noeight)
+mod_SM_p2 <- glm(log.pfu~prop.SM*bottleneck, data=pheno_noeight)
+
+mod_CR_p1 <- glm(log.pfu~prop.CRISPR, data=pheno_noeight)
+mod_CR_p2 <- glm(log.pfu~prop.CRISPR*bottleneck, data=pheno_noeight)
+
+anova(mod_S_p1, mod_S_p2, test='LRT')
+anova(mod_SM_p1, mod_SM_p2, test='LRT')
+anova(mod_CR_p1, mod_CR_p2, test='LRT')
+
+Sp_AIC <- AIC(mod_p3_null, mod_S_p1, mod_S_p2)
+SMp_AIC <- AIC(mod_p3_null, mod_SM_p1, mod_SM_p2)
+CRp_AIC <- AIC(mod_p3_null, mod_CR_p1, mod_CR_p2)
+
+compare_AICs(Sp_AIC)
+compare_AICs(SMp_AIC)
+compare_AICs(CRp_AIC)
+
+pseudo_R2(mod_S_p2, mod_p3_null)
+pseudo_R2(mod_SM_p1, mod_p3_null)
+pseudo_R2(mod_CR_p2, mod_p3_null)
+
+summary(mod_S_p2)
+summary(mod_CR_p2)
+summary(mod_SM_p2)
+
+qplot(y=log.pfu, x=prop.Sensitive, data=pheno_noeight)+
+  geom_point()+
+  geom_smooth(method='glm', formula=y~x, se=T)+
+  facet_wrap(~bottleneck)+
+  theme_bw()
+
+qplot(y=log.pfu, x=prop.CRISPR, data=pheno_noeight)+
+  geom_point()+
+  geom_smooth(method='glm', formula=y~x, se=T)+
+  facet_wrap(~bottleneck, scales = 'free')+
+  theme_bw()
+
+qplot(y=log.pfu, x=prop.SM, data=pheno_noeight)+
+  geom_point()+
+  geom_smooth(method='glm', formula=y~x, se=T)+
+  facet_wrap(~bottleneck)+
+  theme_bw()
+
+```
+
+```{r Get pheno coefficients, include=FALSE}
+model.tables(aov(mod.g), "mean")
+
+pheno$Bottleneck %<>% relevel(., ref="9")
+pheno$Bottleneck %<>% relevel(., ref="8")
+pheno$Bottleneck %<>% relevel(., ref="7")
+pheno$Bottleneck %<>% relevel(., ref='6')
+pheno$Bottleneck %<>% relevel(., ref='5')
+pheno$Bottleneck %<>% relevel(., ref='4')
+pheno$Bottleneck %<>% relevel(., ref='3')
+pheno$Bottleneck %<>% relevel(., ref='2')
+
+pheno$variable %<>% relevel(ref="CRISPR")
+pheno$variable %<>% relevel(ref="SM")
+pheno$variable %<>% relevel(ref="Sensitive")
+
+mod.g <- glm(value~Bottleneck*variable, data=pheno, family=binomial)
+logit2prob(confint(mod.g))
+confint(mod.g)
+
+```
+
+```{r Exp2 pheno summary figs}
+exp2_pheno_sum <- read.csv('Phage_bn_exp/data/phenotype/phenotype_binom_summary.csv')
+exp2_pheno_sum$bottleneck %<>% as.factor()
+#exp2_pheno_sum %<>% filter(., variable!='SM')
+pd = position_dodge(0.1)
+
+exp2_pheno_fig <- ggplot(aes(y=mean, x=bottleneck, group=variable), data=exp2_pheno_sum)+
+  geom_point(aes(shape=variable, colour=variable), stat='identity', size=5, position=pd)+
+  geom_errorbar(aes(ymin=lower, ymax=upper, colour=variable), width=0.3, size=0.7, position=pd)+
+  
+  labs(x='Bottleneck strength', y='Relative frequency')+
+  
+  theme_bw()+
+  theme(plot.title = element_text(face="bold", hjust=0.5, size = 16))+
+  theme(axis.title = element_text(face='bold', size=16))+
+  
+  scale_x_discrete(breaks=sol_OG_bottleneck, labels=sol_bottleneck_names_legend)+
+  theme(axis.text = element_text(size=12))+
+  
+  scale_color_discrete(name='Genotype',
+                       breaks=c('CRISPR', 'Sensitive', "SM"),
+                       labels=c('CRISPR', 'Sensitive', "SM"))+
+  scale_shape_discrete(name='Genotype',
+                       breaks=c('CRISPR', 'Sensitive', "SM"),
+                       labels=c('CRISPR', 'Sensitive', "SM"))+
+  theme(legend.title = element_text(face='bold', size=16))+
+  theme(legend.title.align = 0.5)+
+  theme(legend.position = 'right')+
+  theme(legend.key.width = unit(1, 'cm'))+
+  theme(legend.key.height = unit(1, 'cm'))+
+  theme(legend.text = element_text(size=12))
+  
+exp2_pheno_fig
+```
+
+--- Experiment 2: Spacer data
+```{r Load spacer data}
+exp2_spacer <- read.csv('Phage_bn_exp/data/PCR/spacer_poiss.csv')
+exp2_spacer$Bottleneck %<>% as.factor()
+exp2_spacer %<>% filter(Total.spacers > 0)
+exp2_spacer %<>% select(-Zero)
+```
+
+```{r Spacer models}
+# The spacer data is made up of counts, so an a priori approach suggests that a poisson distribution with an identity link will be appropriate
+mod.null <- glm(Total.spacers ~ 1, data=exp2_spacer, family=poisson(link="identity"))
+summary(mod.null)
+pseudo_R2(mod.null, mod.null)
+
+mod.g <- glm(Total.spacers~Bottleneck, data=exp2_spacer, family=poisson(link="identity"))
+summary(mod.g)
+confint(mod.g)
+
+AIC(mod.null, mod.g) %>% compare_AICs()
+pseudo_R2(mod.g, mod.null)
+1- pchisq(mod.g$deviance, mod.g$df.residual)
+anova(mod.null, mod.g, test="LRT")
+
+# deviance/residual DF ratio is very close to one, which suggests that overdispersion is limited and that the Poisson distribution is a appropriate. K-L of the global model is also good, suggesting that mod.g is a good estimating model
+```
+
+```{r Get spacer model coefs}
+model.tables(aov(mod.g), "mean")
+
+exp2_spacer$Bottleneck %<>% relevel(., ref="9")
+exp2_spacer$Bottleneck %<>% relevel(., ref="8")
+exp2_spacer$Bottleneck %<>% relevel(., ref="7")
+exp2_spacer$Bottleneck %<>% relevel(., ref='6')
+exp2_spacer$Bottleneck %<>% relevel(., ref='5')
+exp2_spacer$Bottleneck %<>% relevel(., ref='4')
+exp2_spacer$Bottleneck %<>% relevel(., ref='3')
+exp2_spacer$Bottleneck %<>% relevel(., ref='2')
+
+mod.g <- glm(Total.spacers~Bottleneck, data=exp2_spacer, family=poisson(link="identity"))
+confint(mod.g)
+```
+
+```{r Spacer summaries}
+spacer_sum_2 <- read.csv("~/OneDrive/Data/Bottlenecks/Phage_bn_exp/data/PCR/PCR_summary_poiss.csv")
+spacer_sum_2$bottleneck %<>% as.factor()
+
+spacer_sum_plot_2 <- ggplot(aes(y=mean, x=bottleneck), data=spacer_sum_2)+
+  geom_point()+
+  geom_errorbar(aes(ymin=lower, ymax=upper), size=0.7, width=0.3)+
+  labs(x='Bottleneck strength', y='Mean')+
+  
+  theme_bw()+
+  theme(plot.title = element_text(face="bold", hjust=0.5, size = 16))+
+  theme(axis.title = element_text(face='bold', size=16))+
+  
+  scale_x_discrete(breaks=sol_OG_bottleneck, labels=sol_bottleneck_names_legend)+
+  theme(axis.text = element_text(size=12))+
+  
+  theme(legend.title = element_text(face='bold', size=16))+
+  theme(legend.title.align = 0.5)+
+  theme(legend.position = 'right')+
+  theme(legend.key.width = unit(1, 'cm'))+
+  theme(legend.key.height = unit(1, 'cm'))+
+  theme(legend.text = element_text(size=12))
+spacer_sum_plot_2
+```
+
+```{r Spacer proportion models}
+# reshape spacer data
+exp2_spacer <- melt(exp2_spacer, measure.vars = c("One", "Two", "Three", "Four", "FiveOrMore"))
+
+mod.1 <- glm(value~variable*Bottleneck, data=exp2_spacer, family = binomial())
+1 - pchisq(mod.1$deviance, mod.1$df.residual)
+summary(mod.1)
+
+model.tables(aov(mod.1), "mean")
+```
+
+```{r Spacer proportion coefficients}
+exp2_spacer$Bottleneck %<>% relevel(ref="8")
+exp2_spacer$Bottleneck %<>% relevel(ref="7")
+exp2_spacer$Bottleneck %<>% relevel(ref="6")
+exp2_spacer$Bottleneck %<>% relevel(ref="5")
+exp2_spacer$Bottleneck %<>% relevel(ref="4")
+exp2_spacer$Bottleneck %<>% relevel(ref="3")
+exp2_spacer$Bottleneck %<>% relevel(ref="2")
+
+exp2_spacer$variable %<>% relevel(ref="FiveOrMore")
+exp2_spacer$variable %<>% relevel(ref="Four")
+exp2_spacer$variable %<>% relevel(ref="Three")
+exp2_spacer$variable %<>% relevel(ref="Two")
+exp2_spacer$variable %<>% relevel(ref="One")
+
+mod.1 <- glm(value~variable*Bottleneck, data=exp2_spacer, family = binomial())
+suppressWarnings( logit2prob(confint(mod.1)))
+
+```
+
+```{r Exp2 Spacer proportion summary}
+exp2.spacer.prop.sum <- read.csv("./Phage_bn_exp/data/PCR/spacer_proportion_summary.csv", header=T) 
+exp2.spacer.prop.sum$Bottleneck %<>% as.factor
+
+plot1 <- ggplot(aes(y=mean, x=Spacer.Number), data=exp2.spacer.prop.sum)+
+  geom_bar(stat="identity", position=position_dodge(1))+
+  geom_point(position = position_dodge(1))+
+  geom_errorbar(aes(ymin=lower, ymax=upper), position = position_dodge(1), width=0.3, size=0.7)+
+  theme_bw()+
+  facet_wrap(~Bottleneck)
+
+plot1
+
+```
+
+```{r Exp2 Binary models}
+exp2_spacer %<>% select(ID, Bottleneck, Single, Multiple)
+exp2_spacer <- melt(exp2_spacer, measure.vars = c("Single", "Multiple"))
+
+mod.null <- glm(value~1, data=exp2_spacer, family=binomial)
+mod.1 <- glm(value~Bottleneck, data=exp2_spacer, family=binomial)
+mod.2 <- glm(value~variable, data=exp2_spacer, family=binomial)
+mod.g <- glm(value~Bottleneck*variable, data=exp2_spacer, family=binomial)
+
+AIC(mod.null, mod.1, mod.2, mod.g) %>% compare_AICs()
+
+anova(mod.null, mod.1, mod.2, mod.g, test="LRT")
+
+1 - pchisq(mod.g$deviance, mod.g$df.residual)
+summary(mod.g)
+
+model.tables(aov(mod.g), "mean")
+```
+
+```{r Exp2 binary model coefs}
+exp2_spacer$Bottleneck %<>% relevel(ref="9")
+exp2_spacer$Bottleneck %<>% relevel(ref="8")
+exp2_spacer$Bottleneck %<>% relevel(ref="7")
+exp2_spacer$Bottleneck %<>% relevel(ref="6")
+exp2_spacer$Bottleneck %<>% relevel(ref="5")
+exp2_spacer$Bottleneck %<>% relevel(ref="4")
+exp2_spacer$Bottleneck %<>% relevel(ref="3")
+exp2_spacer$Bottleneck %<>% relevel(ref="2")
+
+exp2_spacer$variable %<>% relevel(ref="Single")
+exp2_spacer$variable %<>% relevel(ref="Multiple")
+
+mod.g <- glm(value~Bottleneck*variable, data=exp2_spacer, family=binomial)
+suppressWarnings( CopyCIs(mod.g) )
+```
+
+--- Experiment 3: Phage data
+```{r Exp3 Phage data}
+# Load in the bacteria-phage count data and remove NAs
+extreme = read.csv("./Plate_bn_exp/data/counts/counts_master_extreme_bn_csv.csv", header=T)
+extreme = subset(extreme, timepoint != '')
+
+# make new columns in the data for log-transformed pfu and cfu counts
+# adds one to account for zero values
+extreme$pfu %<>% + 1
+extreme$log.pfu <- log10(extreme$pfu)
+
+extreme$bottleneck %<>% relevel(., ref='5-clone')
+extreme$bottleneck %<>% relevel(., ref='monoculture')
+
+extreme <- extreme %>% 
+  group_by(bottleneck, timepoint) %>% 
+  mutate(weights = 1/( (sd(log.pfu)/sqrt(6) ) +1 ))
+
+# Look at the range of weight values
+range(extreme$weights)
+
+# Definitely need to include them in models
+
+```
+
+```{r Exp3 phage at all timepoints - models}
+
+shapiro.test(extreme$log.pfu)
+# Data is definitely not normally distributed, even with a log10-transformation.
+
+# The pfu data may be poisson-distributed. Check this by comparing the mean to the variance (ratio should be close to 1). I have also appended the SD of each combination for later use
+plate_sum <- extreme %>% group_by(timepoint, bottleneck) %>% 
+  summarise(mean=mean(log.pfu), var=var(log.pfu), sd=sd(log.pfu))
+plate_sum <- mutate(plate_sum, poission.ratio = var/mean)
+write.csv(plate_sum, file="exp3_SDs.csv")
+
+# Clear from this that the var/mean ratio is very far from 1 in most timepoint*bottleneck combinations. Let's stay with the normal distribution, with the understanding that it is not an ideal model for the pfu data
+
+mod_null <- glm(log.pfu~1, weights=weights, data=extreme)
+mod_1 <- glm(log.pfu~bottleneck, weights=weights, data=extreme)
+mod_2 <- glm(log.pfu~timepoint, weights=weights,data=extreme)
+mod_3<- glm(log.pfu~timepoint*bottleneck, weights=weights, data=extreme)
+
+anova(mod_null, mod_1, mod_2, mod_3, test='LRT')
+pseudo_R2(mod_3)
+par(mfrow=c(2,2))
+plot(mod_1)
+plot(mod_2)
+plot(mod_3)
+```
+
+```{r Exp3 phage model coefficients}
+extreme$bottleneck %<>% relevel(., ref="50-clone")
+extreme$bottleneck %<>% relevel(., ref="5-clone")
+extreme$bottleneck %<>% relevel(., ref="monoculture")
+
+extreme$timepoint %<>% relevel(., ref='t5')
+extreme$timepoint %<>% relevel(., ref='t4')
+extreme$timepoint %<>% relevel(., ref='t3')
+extreme$timepoint %<>% relevel(., ref='t2')
+extreme$timepoint %<>% relevel(., ref='t1')
+extreme$timepoint %<>% relevel(., ref='t0')
+
+mod_3<- glm(log.pfu~bottleneck*timepoint, weights=weights, data=extreme)
+summary(mod_3)
+model_stats(mod_3)
+```
+
+```{r Summary plot of phage titre means & SDs}
+exp3_phage_sum <- read.csv('~/OneDrive/Data/Bottlenecks/Plate_bn_exp/data/counts/counts_summary_weighted.csv', header = T)
+
+exp3_phage_sum$bottleneck %<>% relevel(ref='5-clone')
+exp3_phage_sum$bottleneck %<>% relevel(ref='monoculture')
+
+exp3_phage_sum_plot <- ggplot(data=subset(exp3_phage_sum, timepoint!='t0'), aes(x=bottleneck, y=mean))+
+  
+  geom_errorbar(aes(ymin=lower, ymax=upper), width=0.2, size=0.7, position=pd)+
+  geom_point(stat="identity", size=4, position=pd)+
+  facet_wrap(~timepoint, labeller=timepoint_labeller)+
+  
+  labs(x='Bottleneck size', y=expression(bold("Log"*{}[bold("10")]*" p.f.u ml"*{}^{-1}*"")))+
+  #ggtitle("Summary of phage and bacterial titers in evolution bottleneck experiment")+
+  
+  theme_bw()+
+  theme(legend.key.size = unit(0.5, 'cm'))+
+  theme(plot.title = element_text(face="bold", hjust=0.5, size = 16))+
+  theme(axis.title = element_text(face="bold", size=20))+
+  
+  theme(axis.text = element_text(size=14))+
+  theme(strip.text = element_text(size=16))+
+  theme(legend.key.width  = unit(1.3, 'cm'))+
+  
+  scale_x_discrete(breaks=plate_OG_bottleneck, labels=plate_bottleneck_names_legend)+
+  scale_y_continuous(breaks=c(seq(0,15,1)))+
+  
+  theme(legend.position = 'none')
+exp3_phage_sum_plot
+
+exp3_phage_SD_bar <- ggplot(aes(x=timepoint, y=sd), data=subset(plate_sum, timepoint!="t0"))+
+  geom_point(shape=95, size=15)+
+  geom_bar(stat="identity")+
+  facet_wrap(~bottleneck, labeller = plate_bottleneck_labeller)+
+  labs(y="SD", x="Days post-infection (d.p.i.)")+
+  
+  theme_bw()+
+  theme(plot.title = element_text(face="bold", hjust=0.5, size = 16))+
+  theme(axis.title = element_text(face="bold", size=20))+
+  
+  theme(axis.text = element_text(size=14))+
+  theme(strip.text = element_text(size=16))+
+  
+  scale_x_discrete(breaks=OG_timepoints, labels=timepoint_names_legend)
+exp3_phage_SD_bar
+```
+
+```{r Exp3 pfu~cfu}
+### Look at cfu and pfu as a function of each other
+# Load in the t=3 dataset (includes the CFU counts) and format it for analysis
+t3= read.csv('./Plate_bn_exp/data/all_data_t3.csv', header = T)
+t3$pfu %<>% + 1
+t3$log.pfu <- log10(t3$pfu)
+t3 <- t3 %>% 
+  group_by(bottleneck) %>% 
+  mutate(weights =1/( (sd(log.pfu)/sqrt(6) ) +1 ))
+
+t3$prop.Resistant <- t3$prop.CRISPR + t3$prop.SM
+
+t3$bottleneck %<>% relevel(., ref='5-clone')
+t3$bottleneck %<>% relevel(., ref='monoculture')
+
+# Nested models of pfu as a function of cfu
+mod_null = glm(log.pfu~1, data=t3, weights=weights)
+mod_1 = glm(log.pfu~cfu, data=t3, weights=weights)
+mod_2 = glm(log.pfu~cfu*bottleneck, data=t3)
+
+anova(mod_null, mod_1, mod_2, test='LRT')
+AICs_t3 = AIC(mod_null, mod_1, mod_2)
+AICs_t3
+compare_AICs(AICs_t3)
+
+pseudo_R2(mod_2)
+
+summary(mod_2)
+par(mfrow=c(2,2))
+plot(mod_2)
+
+## Also see if there is an effect of replicate on pfu (depending on bottleneck). Decided on this given the raw data figures for the pfu ml-1 across the experiment
+
+```
+
+```{r Exp3 pfu~genotypes}
+## PFU ~ relative frequency of CRISPR clones
+
+mod_null= glm(log.pfu~1, data=t3, weights=weights)
+mod_1 = glm(log.pfu~prop.CRISPR, data=t3, weights=weights)
+mod_2 = glm(log.pfu~bottleneck*prop.CRISPR, data=t3, weights = weights)
+
+anova(mod_null, mod_1, mod_2, test='LRT')
+AICs_t3 = AIC(mod_null, mod_1, mod_2)
+AICs_t3
+compare_AICs(AICs_t3)
+
+pseudo_R2(mod_1)
+pseudo_R2(mod_2)
+
+summary(mod_2)
+confint(mod_2)
+
+# Looks like there is a marginally insignificant difference in how the relative frequency of CRISPR clones affects phage titre between bottleneck treatments, at least according to the p-value. However, the 95% CIs are outside of zero, which suggests that this relationship might be biologically significant, if not statistically so. 
+
+## PFU ~ relative frequency of SM clones
+mod_null= glm(log.pfu~1, data=t3, weights=weights)
+mod_1 = glm(log.pfu~prop.SM, data=t3, weights=weights)
+mod_2 = glm(log.pfu~bottleneck*prop.SM, data=t3, weights=weights)
+
+anova(mod_null, mod_1, mod_2, test='LRT')
+AICs_t3 = AIC(mod_null, mod_1, mod_2)
+AICs_t3
+compare_AICs(AICs_t3)
+
+pseudo_R2(mod_1)
+pseudo_R2(mod_2)
+
+summary(mod_2)
+confint(mod_2)
+
+# A marginally significant postive relationship in the monoculture treatment between phage titre and proportion SM, that disappears in the 5- and 50-clone treatments. Again, the CIs are above zero, whic suggests that the biological significance of this relationship is real.
+```
+
+--- Experiment 3: Phenotype data
+```{r Exp3 phenotype data}
+pheno <- read.csv('./Plate_bn_exp/data/phenotype/prop_test.csv', header=T)
+pheno <- melt(pheno, measure.vars = c('CRISPR', 'SM', 'Sensitive'))
+pheno$Bottleneck %<>% relevel(ref="Monoculture")
+```
+
+```{r Exp3 pheno analysis}
+# Interested in the proportion of each phenotype in each bottleneck treatment, so the models use a binomial distribution with a logit link
+
+mod.null <- glm(value~1, data=pheno, family=binomial)
+mod.1 <- glm(value~Bottleneck, data=pheno, family=binomial)
+mod.2 <- glm(value~variable, data=pheno, family=binomial)
+mod.g <- glm(value~Bottleneck*variable, data=pheno, family=binomial)
+
+# Compare using delta-AIC to get K-L values
+AIC(mod.null, mod.1, mod.2, mod.g) %>% compare_AICs()
+
+# And check R2 
+pseudo_R2(mod.1, mod.null)
+pseudo_R2(mod.2, mod.null)
+pseudo_R2(mod.g, mod.null)
+
+# And finally a likelihood test
+anova(mod.g, test="Chisq")
+
+# Looks like the global model (mod.g) is overfitted slightly, given the AIC comparison. The R2 between mod.2 and mod.g are essentially the same, and the LRT suggets that genotype has a very strong effect on probability. This makes sense, as preliminary analysis shows that CRISPR seems to be the most frequent in all treatments. Despite the overfitted global model, I will proceed with it, as these are the comparisons that are of interest and biological relevance.
+
+summary(mod.g)
+confint(mod.g)
+
+# Doesn't look like there's any effect of bottlenecking on the logits of different phenotypes in this experiment i.e. CRISPR is always the most frequent genotype.
+# Get the actual probabilities from the model
+model.tables(aov(mod.g), "mean")
+logit2prob(confint(mod.g))
+
+```
+
+```{r Exp3 pheno coefficients, include=FALSE}
+pheno$bottleneck %<>% relevel(., ref="50-clone")
+pheno$bottleneck %<>% relevel(., ref="5-clone")
+pheno$bottleneck %<>% relevel(., ref="monoculture")
+
+mod_S_1 <- glm(prop.Sensitive~bottleneck, data=pheno, na.action = na.omit)
+model_stats(mod_S_1)
+
+mod_SM_1 <- glm(prop.SM~bottleneck, data=pheno, na.action = na.omit)
+model_stats(mod_SM_1)
+
+mod_CR_1 <- glm(prop.CRISPR~bottleneck, data = pheno,  na.action = na.omit)
+model_stats(mod_CR_1)
+```
+
+```{r Exp3 phenotype summary figure}
+exp3_pheno_sum <- read.csv('Plate_bn_exp/data/phenotype/phenotype_summary.csv')
+exp3_pheno_sum %<>% na.exclude()
+exp3_pheno_sum$bottleneck %<>% relevel(., ref='monoculture')
+exp3_pheno_sum$variable %<>% relevel(., ref='Sensitive')
+exp3_pheno_sum$variable %<>% relevel(., ref='SM')
+exp3_pheno_sum$variable %<>% relevel(., ref='CRISPR')
+
+exp3_pheno_fig <- ggplot(aes(y=mean, x=bottleneck, group=variable), data=exp3_pheno_sum)+
+  geom_point(aes(shape=variable, colour=variable), stat='identity', size=5, position=pd)+
+  geom_errorbar(aes(ymin=lower, ymax=upper, colour=variable), width=0.3, size=0.7, position=pd)+
+  
+  labs(x='Bottleneck strength', y='Relative frequency')+
+  
+  theme_bw()+
+  theme(plot.title = element_text(face="bold", hjust=0.5, size = 16))+
+  theme(axis.title = element_text(face='bold', size=16))+
+  
+  scale_x_discrete(breaks=plate_OG_bottleneck, labels=plate_bottleneck_names_legend)+
+  theme(axis.text = element_text(size=12))+
+  
+  scale_color_discrete(name='Genotype')+
+  scale_shape_discrete(name='Genotype')+
+
+  theme(legend.title = element_text(face='bold', size=16))+
+  theme(legend.title.align = 0.5)+
+  theme(legend.position = 'right')+
+  theme(legend.key.width = unit(1.4, 'cm'))+
+  theme(legend.key.height = unit(1, 'cm'))+
+  theme(legend.text = element_text(size=12))
+
+exp3_pheno_fig
+```
+
+--- Experiment 3: Spacer data
+```{r Exp3 spacer data }
+exp3_spacer <- read.csv('./Plate_bn_exp/data/PCR/spacers_poisson.csv')
+exp3_spacer %<>% na.exclude
+exp3_spacer$Bottleneck %<>% relevel(ref="Monoculture")
+exp3_spacer$Replicate %<>% as.factor()
+exp3_spacer %<>% filter(Total.spacers > 0)
+exp3_spacer %<>% select(-Zero)
+```
+
+```{r Exp3 Spacer count models}
+# The spacer data is made up of counts, so an a priori approach suggests that a poisson distribution with an identity link will be appropriate
+mod.null <- glm(Total.spacers ~ 1, data=exp3_spacer, family=poisson(link="identity"))
+summary(mod.null)
+pseudo_R2(mod.null, mod.null)
+
+mod.g <- glm(Total.spacers~Bottleneck, data=exp3_spacer, family=poisson(link="identity"))
+summary(mod.g)
+confint(mod.g)
+
+AIC(mod.null, mod.g) %>% compare_AICs()
+pseudo_R2(mod.g, mod.null)
+
+# deviance/residual DF ratio is very close to one, which suggests that overdispersion is limited and that the Poisson distribution is a appropriate. K-L of the global model is also good, suggesting that mod.g is a good estimating model
+summary(mod.g)
+confint(mod.g)
+model.tables(aov(mod.g), "mean")
+```
+
+```{r Exp3 spacer count coefficients, include=FALSE}
+exp3_spacer$Bottleneck %<>% relevel(., ref="50-clone")
+exp3_spacer$Bottleneck %<>% relevel(., ref="5-clone")
+exp3_spacer$Bottleneck %<>% relevel(., ref="Monoculture")
+
+mod.g <- glm(Total.spacers~Bottleneck, data=exp3_spacer, family=poisson(link="identity"))
+confint(mod.g)
+```
+
+```{r Exp3 Spacer summaries}
+exp3_spacer_sum <- read.csv("Plate_bn_exp/data/PCR/PCR_summary.csv")
+exp3_spacer_sum$bottleneck %<>% as.factor()
+exp3_spacer_sum$bottleneck %<>% relevel(., ref='monoculture')
+# Back-transform the mean and CI estimates by exponentiating them
+exp3_spacer_sum <- mutate(exp3_spacer_sum, exp(mean))
+exp3_spacer_sum <- mutate(exp3_spacer_sum, exp(upper))
+exp3_spacer_sum <- mutate(exp3_spacer_sum, exp(lower))
+
+exp3_spacer_sum_plot <- ggplot(aes(y=exp(mean), x=bottleneck), data=exp3_spacer_sum)+
+  geom_point(size=4)+
+  geom_errorbar(aes(ymin=exp(lower), ymax=exp(upper)), size=0.7, width=0.3)+
+  labs(x='Bottleneck strength', y='Mean')+
+  
+  theme_bw()+
+  theme(plot.title = element_text(face="bold", hjust=0.5, size = 16))+
+  theme(axis.title = element_text(face='bold', size=16))+
+  
+  scale_x_discrete(breaks=plate_OG_bottleneck, labels=plate_bottleneck_names_legend)+
+  theme(axis.text = element_text(size=12))+
+  
+  scale_color_discrete(name='Measurement',
+                       breaks=c('number'),
+                       labels=c('Total number\nof spacers'))+
+  scale_shape_discrete(name='Measurement',
+                       breaks=c('number'),
+                       labels=c('Total number\nof spacers'))+
+  theme(legend.title = element_text(face='bold', size=16))+
+  theme(legend.title.align = 0.5)+
+  theme(legend.position = 'right')+
+  theme(legend.key.width = unit(1, 'cm'))+
+  theme(legend.key.height = unit(1, 'cm'))+
+  theme(legend.text = element_text(size=12))
+exp3_spacer_sum_plot
+```
+
+```{r Exp3 Spacer proportion models}
+# Reshape spacer data
+exp3_spacer <- melt(exp3_spacer, measure.vars = c("One", "Two", "Three", "Four", "FiveOrMore"))
+
+mod.1 <- glm(value~variable*Bottleneck, data=exp3_spacer, family=binomial)
+summary(mod.1)
+1- pchisq(mod.1$deviance, mod.1$df.residual)
+model.tables(aov(mod.1), "mean")
+```
+
+```{r Exp3 Spacer proporiton coefficients}
+exp3_spacer$Bottleneck %<>% relevel(ref="50-clone")
+exp3_spacer$Bottleneck %<>% relevel(ref="5-clone")
+exp3_spacer$Bottleneck %<>% relevel(ref="Monoculture")
+
+exp3_spacer$variable %<>% relevel(ref="FiveOrMore")
+exp3_spacer$variable %<>% relevel(ref="Four")
+exp3_spacer$variable %<>% relevel(ref="Three")
+exp3_spacer$variable %<>% relevel(ref="Two")
+exp3_spacer$variable %<>% relevel(ref="One")
+
+mod.1 <- glm(value~variable*Bottleneck, data=exp3_spacer, family=binomial)
+suppressWarnings( logit2prob(confint(mod.1)) )
+```
+
+```{r Exp3 Spacer proportion summaries}
+
+exp3_spacer_prop_sum <- read.csv(file.choose(), header=T)
+exp3_spacer_prop_sum$Bottleneck %<>% relevel(ref="5-clone")
+exp3_spacer_prop_sum$Bottleneck %<>% relevel(ref="monoculture")
+
+plot1 <- ggplot(aes(y=mean, x=Bottleneck, group=Spacer.Number), data=exp3_spacer_prop_sum)+
+  geom_bar(stat="identity", aes(fill=Spacer.Number), position=position_dodge(1))+
+  geom_point(position = position_dodge(1))+
+  geom_errorbar(aes(ymin=lower, ymax=upper), position = position_dodge(1), width=0.3, size=0.7)+
+  theme_bw()
+
+plot1
+
+```
+
+```{r Exp3 Spacer binary models}
+# Drop the "One" etc variables to leave only binary data, and reshape
+exp3_spacer %<>% select(ID, Replicate, Bottleneck, Single, Multiple)
+exp3_spacer <- melt(exp3_spacer, measure.vars = c("Single", "Multiple"))
+
+mod.null <- glm(value~1, data=exp3_spacer, family=binomial)
+mod.1 <- glm(value~Replicate, data=exp3_spacer, family=binomial)
+mod.2 <- glm(value~Bottleneck, data=exp3_spacer, family=binomial)
+mod.3 <- glm(value~variable, data=exp3_spacer, family=binomial)
+mod.4 <- glm(value~Replicate*Bottleneck, data=exp3_spacer, family=binomial)
+mod.5 <- glm(value~Replicate*variable, data=exp3_spacer, family=binomial)
+mod.6 <- glm(value~Bottleneck*variable, data=exp3_spacer, family=binomial)
+mod.g <- glm(value~Replicate*Bottleneck*variable, data=exp3_spacer, family=binomial)
+
+AIC(mod.null, mod.1, mod.2,
+    mod.3, mod.4, mod.5, mod.6, mod.g) %>% compare_AICs()
+
+anova(mod.null, mod.1, mod.2, mod.3, mod.4, mod.5, mod.6, mod.g, test="LRT")
+
+1 - pchisq(mod.g$deviance, mod.g$df.residual)
+summary(mod.g)
+
+model.tables(aov(mod.g), "mean")
+```
+
+```{r Exp3 Spacer binary coefficients}
+exp3_spacer$Replicate %<>% relevel(ref="6")
+exp3_spacer$Replicate %<>% relevel(ref="5")
+exp3_spacer$Replicate %<>% relevel(ref="4")
+exp3_spacer$Replicate %<>% relevel(ref="3")
+exp3_spacer$Replicate %<>% relevel(ref="2")
+exp3_spacer$Replicate %<>% relevel(ref="1")
+
+exp3_spacer$Bottleneck %<>% relevel(ref="50-clone")
+exp3_spacer$Bottleneck %<>% relevel(ref="5-clone")
+exp3_spacer$Bottleneck %<>% relevel(ref="Monoculture")
+
+exp3_spacer$variable %<>% relevel(ref="Multiple")
+exp3_spacer$variable %<>% relevel(ref="Single")
+
+mod.g <- glm(value~Replicate*Bottleneck*variable, data=exp3_spacer, family=binomial)
+suppressWarnings( CopyCIs(mod.g) )
+```
+
+```{r}
+exp3.bin.sum <- read.csv("Plate_bn_exp/data/PCR/exp3_spacer_binary_sum.csv")
+exp3.bin.sum$Replicate %<>% as.factor
+exp3.bin.sum$log.pfu <- log(exp3.bin.sum$pfu+1)
+
+mod.null <- glm(log.pfu~1, data=exp3.bin.sum)
+mod.1 <- glm(mean~log.pfu, data=exp3.bin.sum)
+mod.2 <- glm(log.pfu~Replicate, data=exp3.bin.sum)
+mod.3 <- glm(log.pfu~Bottleneck, data=exp3.bin.sum)
+mod.4 <- glm(log.pfu~mean*Replicate, data=exp3.bin.sum)
+mod.5 <- glm(log.pfu~mean*Bottleneck, data=exp3.bin.sum)
+mod.6 <- glm(log.pfu~Replicate*Bottleneck, data=exp3.bin.sum)
+mod.g <- glm(log.pfu~mean*Replicate*Bottleneck, data=exp3.bin.sum)
+
+AIC(mod.null, mod.1, mod.2, mod.3,
+    mod.4, mod.5, mod.6, mod.g) %>% compare_AICs()
+
+summary(mod.1)
+
+```
+

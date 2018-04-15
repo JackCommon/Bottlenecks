@@ -1,0 +1,215 @@
+---
+title: "Extended bottleneck experiment analysis"
+author: "Jack Common"
+date: "2/20/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Packages, setwd and functions, include=FALSE}
+
+#setwd('C:/Users/jc860/OneDrive - University of Exeter/Data/Bottlenecks/')
+setwd('~/Documents/OneDrive - University of Exeter/Data/Bottlenecks/')
+library(ggplot2)
+library(magrittr)
+library(pander)
+library(scales)
+library(reshape2)
+library(ggpubr)
+library(cowplot)
+library(knitr)
+library(dplyr)
+library(DescTools)
+
+# Make printing out some stats for summary tables/figures quicker and easier
+model_stats = function(model){
+  sum = coef(model)
+  conf = confint(model, level=c(0.95))
+  print(c(sum[1]))
+  print(c(conf[1,1]))
+  print(c(conf[1,2]))
+  
+  stats = data.frame(sum[1], conf[1,1], conf[1,2])
+  clip = pipe('pbcopy', 'w')
+  write.table(stats, file=clip, sep='\t', row.names = F, col.names = F)
+  close(clip)
+  print('Coefficients copied to the clipboard')
+  
+}
+
+#### Compare AIC values
+compare_AICs = function(df){
+  print(df)
+  col_len = length(df[,2])
+  AIC_min = abs(min(df[,2]))
+  for (i in seq(1, col_len, 1)){
+    print( (abs(df[i,2])) - AIC_min)
+  }
+}
+
+```
+
+First I want to compare the variance in spacer number between treatments in the plate experiment
+
+```{r}
+exp1.t3 <- read.csv("Full_bn_2/data/exp1.t3.all.csv", header = T)
+exp1.t3$Bottleneck %<>% as.factor()
+exp1.t3$ID %<>% as.factor()
+exp1.t3 %<>% select(-pfu)
+exp1.t3 %<>% na.exclude()
+```
+
+```{r}
+exp1.t3$cfu %<>% +1
+
+cfu_plot <- ggplot(aes(x=Bottleneck, y=log10(cfu)), data=exp1.t3)+
+  geom_boxplot()+
+  #geom_point()+
+  theme_bw()
+  #scale_y_continuous(trans = 'log10',
+    #                breaks = trans_breaks("log10", function(x) 10^x),
+    #                labels = trans_format("log10", math_format(10^.x)))
+
+cfu_plot
+```
+---
+Have a look at the raw data for phage titres during the culture-only bottleneck experiment
+
+```{r}
+
+# Load in data and format
+culture_raw <- read.csv("Phage_bn_exp/data/all_data_t3.csv")
+culture_raw$ID %<>% as.factor()
+culture_raw$bottleneck %<>% as.factor()
+culture_raw$pfu %<>%  + 1
+```
+
+
+Compare the plot of the raw phage titers from 10^-7 with the same data for 10^-2. In all but one treatment in the former, the phage titres are about the same as the latter. I think this gives support to the explanation that the patterns in phage titres seen in this experiment are caused by changes in host density.
+
+```{r Exp2 culture plots}
+# Have a look at the CFU data and if this matches up with anything
+culture_cfu <- na.exclude(culture_raw)
+culture_cfu %<>% filter(cfu > 0)
+culture_cfu <- select(culture_cfu, bottleneck, cfu)
+culture_cfu$cfu %<>% +1
+
+cfu_plot <- ggplot(aes(x=bottleneck, y=log10(cfu)), data=culture_cfu)+
+  geom_boxplot()+
+  #geom_point()+
+  theme_bw()
+  #scale_y_continuous(trans = 'log10',
+    #                breaks = trans_breaks("log10", function(x) 10^x),
+    #                labels = trans_format("log10", math_format(10^.x)))
+
+cfu_plot
+```
+Looks like there is a decline in CFU as bottleneck strength increases, with very little variance within treatments. Looking at the points of raw data, we can see that the shape of the boxplot for the 10^-8 treatment is caused by the two replicates that had growth.
+
+Now let's model cfu as a function of bottleneck in a GLM. I've transformed bottleneck into a numeric variable and log10 transformed it, to look for any linear trend across the range of bottlenecks.
+
+```{r}
+#culture_cfu$bottleneck %<>% as.numeric()
+
+library("MASS")
+detach("package:MASS")
+
+m.null <- glm(cfu~1, data=culture_cfu, family=gaussian(link = "log"))
+
+m.1 <- glm(cfu~bottleneck, data=culture_cfu, family=gaussian(link="log"))
+
+anova(m.null, m.1, test="LRT")
+AIC(m.null, m.1) %>% compare_AICs()
+```
+
+```{r}
+plot2 <- ggplot(aes(x=bottleneck, y=cfu), data=culture_cfu)+
+  geom_smooth(method='glm', formula = y~x, se = T)+
+  geom_point()+
+  theme_bw()+
+  scale_y_continuous(trans = 'log10',
+                    breaks = trans_breaks("log10", function(x) 10^x),
+                    labels = trans_format("log10", math_format(10^.x)))+
+  scale_x_continuous(breaks=seq(1,8,1))
+plot2
+```
+Okay, that makes sense. But the strength of the relationship is probably due to the two most extreme treatments, which are predominantly zeroes. Let's remove those from the analysis and then see how things look.
+
+```{r}
+culture_cfu$cfu[culture_cfu$cfu == 1] <- NA
+culture_cfu %<>% na.exclude()
+
+m2 <- glm(cfu~bottleneck, data=culture_cfu,
+          family=gaussian(link='log'))
+  
+
+summary(m2) %>% pander()
+par(mfrow=c(2,2))
+plot(m2)
+
+anova(m2, test='LRT') %>% pander()
+
+# Get the McFadden's pseudo-R2 for this model
+(m2$deviance/m2$null.deviance) %>% pander()
+```
+
+```{r}
+culture_bottleneck_names_legend = c(
+  expression('10'^-2*''), 
+  expression('10'^-3*''), 
+  expression('10'^-4*''),
+  expression('10'^-5*''),
+  expression('10'^-6*''),
+  expression('10'^-7*''),
+  expression('10'^-8*'')
+)
+
+plot3 <- ggplot(aes(x=bottleneck, y=cfu), data=culture_cfu)+
+  geom_smooth(method='glm', formula = y~x, se = T)+
+  geom_point()+
+  theme_bw()+
+  
+  labs(y=expression(bold('C.F.U. ml'*{}^{-1}*'')), x='Bottleneck strength')+
+  theme(axis.title = element_text(face='bold', size=20))+
+  theme(axis.text = element_text(size=16))+
+  
+
+  scale_y_continuous(trans = 'log10',
+                    breaks = trans_breaks("log10", function(x) 10^x),
+                    labels = trans_format("log10", math_format(10^.x)))+
+  scale_x_continuous(breaks = seq(1,7, 1),
+                     labels=culture_bottleneck_names_legend)
+plot3
+
+ggsave('culture_cfu_trend_plot.png', plot3, device='png',
+       path='.', width=15, height=12, unit=c('cm'), dpi=400)
+
+```
+The statistical significance of the relationship has weakened, but it is still very strong and of about the same value as the model that included zeroes. I think from this it is reasonable to conclude that there is an effect of bottlenecking on culture density that is unrelated to phage titre
+
+I wonder if there is a similar trend in the plate bottleneck experiment data
+```{r}
+exp3.t3 <- read.csv("./Plate_bn_exp/data/all_data_t3.csv")
+exp3.t3$bottleneck %<>% relevel(ref="monoculture")
+
+exp3.t3 <- select(exp3.t3, bottleneck, cfu, ID)
+exp3.t3$cfu %<>% +1
+exp3.t3$ID %<>% as.factor()
+
+m3 <- glm(cfu~bottleneck, data=exp3.t3, family=gaussian(link='log'))
+(summary(m3)) %>% pander()
+
+# Get the McFadden's pseudo-R2 value
+(m3$deviance/m3$null.deviance) %>% pander()
+
+plot4 <- ggplot(aes(x=ID, y=log10(cfu+1)), data=exp3.t3)+
+  geom_bar(stat="identity")+
+  geom_point()+
+  theme_bw()+
+  facet_wrap(~bottleneck, labeller = plate_bottleneck_labeller)
+plot4
+
+```

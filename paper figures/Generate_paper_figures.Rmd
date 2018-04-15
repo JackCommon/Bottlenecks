@@ -1,0 +1,699 @@
+---
+title: "Bottleneck Experiment Paper - Figures"
+author: "Jack Common"
+date: "2/16/2018"
+output:
+  pdf_document:
+    latex_engine: xelatex
+mainfont: Helvetica
+fontsize: 12pt  
+header-includes:
+- \usepackage[left]{lineno}
+- \linenumbers
+- \def\linenumberfont{\normalfont\small\sffamily}
+- \setlength\linenumbersep{1cm}
+- \usepackage{setspace}\doublespacing
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+tidy.opts=list(width.cutoff=60),
+dpi = 300)
+```
+
+Make sure all of the data files are in the same directory. Set this as your working directory in the R console. The directory I've put everything in to generate figures should be "OneDrive - University of Exeter/Data/Bottlenecks/paper figures".
+
+In the Rmd document, you will find a chunk that details all of the functions and graphing parameters used. Refer to this for details/edits \newline
+
+```{r setwd, include=FALSE}
+# If you want to produce a HTML document from this markdown script, then set the working directory up using the absolute path in the code chunk below. Note: this chunk will not appear in the output document
+setwd("~/OneDrive - University of Exeter/Data/Bottlenecks/paper figures/")
+```
+
+**Packages**  
+```{r Packages, message=FALSE, warning=F}
+library(ggplot2)
+library(scales)
+library(reshape2)
+library(ggpubr)
+library(cowplot)
+library(knitr)
+```
+
+```{r Graphing functions, include=FALSE}
+## Functions and graphical stuff
+# Next I've written some of simple functions that make the graph labels more human-readable. There are also some objects that enable these functions to work properly. *Importantly*, there are different ones for the different experiments, which have been indicated in the comments.
+
+# Lists of the original names (as found in the source data) of the levels of each factor. These are used for the breaks() function in ggplots
+
+# The original genotype names are share across the experiments
+OG_genotypes = c('prop.CRISPR', 'prop.SM', 'prop.Sensitive')
+genotype_names_facet = list(
+  'prop.CRISPR' = 'CRISPR',
+  'prop.Sensitive' = 'SM',
+  'prop.SM' = 'Sensitive'
+)
+
+genotype_names_legend = c('CRISPR', 'SM', 'Sensitive')
+
+genotype_labeller = function(variable, value) {
+  return(genotype_names_facet[value])
+}
+
+# Experiment 1 ran for 3 days and has 6 bottleneck treatments
+exp1_OG_bottleneck = c('100', '1000', '10000', '100000', '1000000','10000000')
+exp1_OG_timepoints = c('t0', 't1', 't2', 't3')
+
+# The new label objects need a list() for when they apply to facet headers (strip.text), and a vector when they apply to legend labels or axis text
+exp1_bottleneck_names_facet = list(
+  '100'      = expression('10'^2*''),
+  '1000'     = expression('10'^3*''),
+  '10000'    = expression('10'^4*''),
+  '1e+05'   =  expression('10'^5*''),
+  '1e+06'  = expression('10'^6*''),
+  '1e+07' = expression('10'^7*'')
+)
+
+exp1_bottleneck_names_legend = c(
+  expression('10'^2*''), 
+  expression('10'^3*''), 
+  expression('10'^4*''),
+  expression('10'^5*''),
+  expression('10'^6*''),
+  expression('10'^7*'')
+)
+
+exp1_timepoint_names_facet = list(
+  't0' = '0 d.p.i.',
+  't1' = '1 d.p.i.',
+  't2' = '2 d.p.i.',
+  't3' = '3 d.p.i.'
+)
+
+exp1_timepoint_names_legend = c('0', '1', '2', '3')
+
+# The functions which set these up
+exp1_bottleneck_labeller = function(variable, value) {
+  return(exp1_bottleneck_names_facet[value])
+}
+
+exp1_timepoint_labeller = function(variable, value) {
+  return(exp1_timepoint_names_facet[value])
+}
+
+### Experiment 2
+## Experiments 2 and 3 both ran for 5 days 
+exp_2_3_OG_timepoints = c('t0', 't1', 't2', 't3', 't4', 't5')
+
+exp2_3_timepoint_names_facet = list(
+  't0' = '0 d.p.i.',
+  't1' = '1 d.p.i.',
+  't2' = '2 d.p.i.',
+  't3' = '3 d.p.i.',
+  't4' = '4 d.p.i.',
+  't3' = '5 d.p.i.'
+)
+
+# Labelers for experiment 2
+exp_2_OG_bottleneck = c('100', '1000', '10000', '100000', '1000000','10000000', '100000000', '1000000000')
+
+exp2_bottleneck_names_facet = list(
+  '100'      = expression('10'^2*''),
+  '1000'     = expression('10'^3*''),
+  '10000'    = expression('10'^4*''),
+  '1e+05'   =  expression('10'^5*''),
+  '1e+06'  = expression('10'^6*''),
+  '1e+07' = expression('10'^7*''),
+  '1e+08' = expression('10'^8*''),
+  '1e+09' = expression('10'^9*'')
+)
+
+exp2_bottleneck_names_legend = c(
+  expression('10'^2*''), 
+  expression('10'^3*''), 
+  expression('10'^4*''),
+  expression('10'^5*''),
+  expression('10'^6*''),
+  expression('10'^7*''),
+  expression('10'^8*''),
+  expression('10'^9*'')
+)
+
+# Function for experiment 2 bottleneck labelling
+# The functions which set these up
+exp2_bottleneck_labeller = function(variable, value) {
+  return(exp2_bottleneck_names_facet[value])
+}
+
+# And the function for the timepoints (this can be used for experiment 3 figures as well)
+exp_2_3_timepoint_labeller = function(variable, value) {
+  return(exp2_timepoint_names_facet[value])
+}
+
+### EXPERIMENT 3
+
+# These vectors just give tidy labels for the figures for experiment 3
+monoculture_IDs = c('M.1', 'M.2', 'M.3', 'M.4', 'M.5', 'M.6')
+fiveclone_IDs = c('5.1', '5.2', '5.3', '5.4', '5.5', '5.6')
+fiftyclone_IDs = c('50.1', '50.2', '50.3', '50.4', '50.5', '50.6')
+
+exp3_replicate_names_legend = c('1', '2', '3', '4', '5', '6')
+
+exp3_OG_bottleneck = c('monoculture', '5-clone', '50-clone')
+
+exp3_bottleneck_names_facet = list(
+  'monoculture'      = expression('Monoculture'),
+  '5-clone'          = expression('5-clone'),
+  '50-clone'         = expression('50-clone')
+)
+
+exp3_bottleneck_names_legend = c(
+  expression('Monoculture'), 
+  expression('5-clone'), 
+  expression('50-clone')
+)
+
+# Function for experiment 3 bottleneck labelling
+exp3_bottleneck_labeller = function(variable, value) {
+  return(exp3_bottleneck_names_facet[value])
+}
+
+## Finally, a little ggplot object that makes the position of geoms more sensible
+
+pd = position_dodge(0.1)
+
+``` 
+
+# Experiment 1: Culture & Phage Bottleneck  
+
+```{r Exp 1 Data, include=F}
+## Read in all the data needed for Experiment 1 graphs
+
+# Summarised phage data for Experiment 1, and format it so the graphs are produced correctly
+exp1_phage = read.csv('./data/exp1_phage_summary_log10.csv', header=T)
+exp1_phage$bottleneck = as.factor(exp1_phage$bottleneck)
+# We are using only the phage titer values, so subset the original dataframe accordingly
+exp1_phage = subset(exp1_phage, Measurement=='PFU')
+
+# Phenotype data 
+exp1_pheno = read.csv('./data/exp1_phenotype_results_csv.csv', header=T)
+
+exp1_pheno_m = melt(exp1_pheno, id.vars = c('bottleneck', 'repeat.'), measure.vars = c('prop.CRISPR', 'prop.SM', 'prop.Sensitive'))
+exp1_pheno_m$bottleneck = as.factor(exp1_pheno_m$bottleneck)
+exp1_pheno_m$repeat. = as.factor(exp1_pheno_m$repeat.)
+
+# Spacer data
+exp1_spacers = read.csv('./data/exp1_spacers.csv')
+exp1_spacers$bottleneck = as.factor(exp1_spacers$bottleneck)
+cr1_exp1_spacers = subset(exp1_spacers, mean.CR1.spacers >= 1)
+cr2_exp1_spacers = subset(exp1_spacers, mean.CR2.spacers >= 1)
+```
+
+
+##Figure 2: Mean phage titer in each bottleneck treatment at each sampling point  
+
+I'm calling this Figure 2 for the time-being, but it may well end up as Figure 1. Change the code accordingly if this decision is made! \newline
+
+```{r Exp 1 Phage titer plot setup, warning=F, include=F}
+exp1_phage_sum_plot <- ggplot(data=subset(exp1_phage, timepoint!='t0'), aes(x=bottleneck, y=Mean, group=Measurement))+
+  
+  geom_errorbar(aes(ymin=Lower, ymax=Upper), width=0.4, size=0.7, position=pd)+
+  geom_point(stat="identity", aes(shape=Measurement), size=5, position=pd)+
+  facet_grid(~timepoint, labeller=exp1_timepoint_labeller)+
+  
+  labs(x='Bottleneck size', y=expression(bold("Log-10 p.f.u ml"*{}^{-1}*"")))+
+  #ggtitle("Summary of phage and bacterial titers in evolution bottleneck experiment")+
+  
+  theme_bw()+
+  theme(legend.key.size = unit(0.5, 'cm'))+
+  theme(plot.title = element_text(face="bold", hjust=0.5, size = 16))+
+  theme(axis.title = element_text(face="bold", size=20))+
+  
+  theme(axis.text = element_text(size=14))+
+  theme(strip.text = element_text(size=16))+
+  theme(legend.key.width  = unit(1.3, 'cm'))+
+  
+  scale_x_discrete(breaks=exp1_OG_bottleneck, labels=exp1_bottleneck_names_legend)+
+  scale_y_continuous(breaks=c(seq(0,15,1)))+
+  
+  theme(legend.position = 'none')
+```
+
+```{r Phage titer plot print & save, fig.width=8, fig.height=3.4, dev='png', echo=FALSE}
+exp1_phage_sum_plot
+
+## Save the plot as Fig. 2  in the current directory
+ggsave('Fig 2.png', exp1_phage_sum_plot, device='png',
+       path = '.', width = 25, height = 10, unit=c('cm'), dpi=300)
+```
+
+
+##Figure 3: Phenotypes, spacers and phage at t=3  
+
+```{r Exp 1 Phenotype plot setup, warning=F, message=F, include=F}
+# First make the phenotype comparison plot
+exp1_pheno_plot <- ggplot(data=exp1_pheno_m, aes(x=bottleneck, y=value))+
+  geom_boxplot(aes(fill=variable))+
+  labs(x='Bottleneck size', y='Proportion')+
+  #ggtitle("Phenotype summary")+
+  theme_bw()+
+  theme(plot.title = element_text(face="bold", hjust=0.5, size = 16))+
+  theme(axis.title = element_text(face='bold', size=16))+
+  
+  scale_x_discrete(breaks=exp1_OG_bottleneck, labels=exp1_bottleneck_names_legend)+
+  theme(axis.text = element_text(size=12))+
+  
+  scale_fill_discrete(name='Genotype',
+                      breaks=OG_genotypes,    # remember that the genotype labels are common to all experiments
+                      labels=genotype_names_legend)+
+  theme(legend.title = element_text(face='bold', size=16))+
+  theme(legend.title.align = 0.5)+
+  theme(legend.position = 'right')+
+  theme(legend.key.width = unit(1, 'cm'))+
+  theme(legend.key.height = unit(1, 'cm'))+
+  theme(legend.text = element_text(size=12))
+```
+
+```{r Exp 1 Spacer plot setup, warning=F, message=F, include=F}
+exp1_spacers_plot = ggplot(exp1_spacers, aes(y=mean.total.spacers, x=bottleneck))+
+  geom_boxplot()+
+  labs(x='Bottleneck size', y="Spacer number")+
+  #ggtitle('Spacers in both CRISPR loci\nin CRISPR clones')+
+  theme_bw()+
+  
+  theme(plot.title = element_text(face="bold", hjust=0.5, size = 20))+
+  theme(axis.title = element_text(face='bold', size=16))+
+  
+  scale_x_discrete(breaks=exp1_OG_bottleneck, labels=exp1_bottleneck_names_legend)+
+  theme(axis.text = element_text(size=12))+
+  
+  scale_y_continuous(breaks = c(seq(1,4.5,0.5)))+
+  coord_cartesian(ylim=c(1.0000,4.5625))
+  
+```
+
+```{r Exp 1 Phage at t3 setup, warning=F, message=F, include=F}
+exp1_phage_t3_plot <- ggplot(data=subset(exp1_phage, timepoint=='t3'), aes(x=bottleneck, y=Mean, group=Measurement))+
+  geom_errorbar(aes(ymin=Lower, ymax=Upper), width=0.1, size=0.7, position=pd)+
+  geom_point(stat="identity", aes(shape=Measurement, size = 0.3), position=pd)+
+  labs(x='Bottleneck size', y=expression(bold("Log-10 p.f.u ml"*{}^{-1}*"")))+
+  #ggtitle("Phage titers at t3 of evolution bottleneck experiment")+
+  theme_bw()+
+  theme(plot.title = element_text(face="bold", hjust=0.5, size = 16))+
+  theme(axis.title = element_text(face="bold", size=14))+
+  theme(axis.text = element_text(size=14))+
+  theme(legend.position = 'none')+
+  
+  scale_y_continuous(breaks = c(seq(0,11,1)))+
+  scale_x_discrete(breaks=exp1_OG_bottleneck, labels=exp1_bottleneck_names_legend)
+
+
+```
+
+```{r Make Figure 3,include=F}
+bottom_row_fig3 = plot_grid(exp1_spacers_plot+theme(plot.margin = unit(c(5.5, 35, 5.5, 5.5), 'pt')), 
+                            exp1_phage_t3_plot,
+                            labels = c('B', 'C'))
+
+fig_3 = plot_grid(exp1_pheno_plot+theme(plot.margin = unit(c(.5, .5, .8, .5), 'cm')), bottom_row_fig3,
+                  ncol = 1, labels = c('A', ''),
+                  rel_widths = c(1,1.3))
+```
+
+```{r Print and save Fig 3, fig.width=9, fig.height=6.4, dev='png',echo=FALSE}
+fig_3
+
+ggsave('Fig 3.png', fig_3, device='png',
+       path = '.', width = 25, height = 20, unit=c('cm'), dpi=300)
+
+```
+
+
+# Experiment 2: Culture Bottleneck  
+
+## Figure 4: Change in phage titers in each bottleneck treatment  
+```{r Exp 2 Data, include=F}
+## Read in all the data needed for Experiment 1 graphs
+
+# Summarised phage data for Experiment 1, and format it so the graphs are produced correctly
+exp2_phage = read.csv('./data/exp2_counts_summary.csv', header=T)
+exp2_phage = subset(exp2_phage, log.pfu.CI =! 0)
+exp2_phage$bottleneck = as.factor(exp2_phage$bottleneck)
+
+# Phenotype data 
+exp2_pheno = read.csv('./data/exp2_phenotype_results.csv', header=T)
+
+exp2_pheno_m = melt(exp2_pheno, id.vars = c('bottleneck', 'repeat.'), measure.vars = c('prop.CRISPR', 'prop.SM', 'prop.Sensitive'))
+exp2_pheno_m$bottleneck = as.factor(exp2_pheno_m$bottleneck)
+exp2_pheno_m$repeat. = as.factor(exp2_pheno_m$repeat.)
+exp2_pheno_m$value = as.numeric(exp2_pheno_m$value)
+
+# Spacer data
+exp2_spacers = read.csv('./data/exp2_spacers.csv')
+exp2_spacers$bottleneck = as.factor(exp2_spacers$bottleneck)
+cr1_exp2_spacers = subset(exp2_spacers, mean.CR1.spacers >= 1)
+cr2_exp2_spacers = subset(exp2_spacers, mean.CR2.spacers >= 1)
+
+```
+
+```{r Exp 2 Phage titer plot setup, warning=F, include=F}
+exp2_phage_sum_plot = ggplot(data=exp2_phage, aes(x=timepoint, y=log.pfu.mean, group=bottleneck))+
+  geom_errorbar(aes(ymin=log.pfu.lower, ymax=log.pfu.upper, colour=bottleneck), width=0.1, size=0.7, position=pd)+
+  geom_point(stat="identity", size = 5, aes(colour=bottleneck), position=pd)+
+  geom_path(stat='identity', aes(colour=bottleneck), position=pd)+
+  labs(x='Days post-infection (d.p.i.)', y=expression(bold("Log-10 p.f.u ml"*{}^{-1}*"")))+
+  ggtitle("")+
+  theme_bw()+
+  scale_colour_discrete(name='Bottleneck\nsize',
+                        breaks = exp_2_OG_bottleneck,
+                        labels = exp2_bottleneck_names_legend)+
+  theme(plot.title = element_text(face="bold", hjust=0.5, size = 20))+
+  theme(axis.title = element_text(face="bold", size=16))+
+  theme(legend.title = element_text(face='bold', size=14))+
+  theme(legend.title.align = 0.5)+
+  theme(legend.position = 'right')+
+  theme(legend.key.width = unit(2, 'cm'))+
+  theme(legend.key.height = unit(1, 'cm'))+
+  
+  scale_x_discrete(breaks=c('t0', 't1', 't2', 't3', 't4', 't5'),
+                   labels=c('0', '1', '2', '3', '4', '5'))+
+  
+  theme(axis.text = element_text(size=12))+
+  theme(legend.text = element_text(size=12))
+```
+
+```{r Exp 2 Phage titer plot print & save, dev='png',echo=FALSE}
+exp2_phage_sum_plot
+
+ggsave('Fig 4.png', plot=exp2_phage_sum_plot, device='png',
+       path='.', width=12, height = 8, units=c('in'), dpi=600)
+```
+
+
+## Figure 5: Phenotype, spacers and phage at t=3
+
+```{r Exp 2 Phenotype plot setup, warning=F, message=F, include=F}
+# First make the phenotype comparison plot
+exp2_pheno_plot <- ggplot(data=exp2_pheno_m, aes(x=bottleneck, y=value))+
+  geom_boxplot(aes(fill=variable))+
+  labs(x='Bottleneck size', y='Proportion')+
+  #ggtitle("Phenotype summary")+
+  theme_bw()+
+  theme(plot.title = element_text(face="bold", hjust=0.5, size = 16))+
+  theme(axis.title = element_text(face='bold', size=16))+
+  
+  scale_x_discrete(breaks=exp_2_OG_bottleneck, labels=exp2_bottleneck_names_legend)+
+  theme(axis.text = element_text(size=12))+
+  
+  scale_fill_discrete(name='Genotype',
+                      breaks=OG_genotypes,    # remember that the genotype labels are common to all experiments
+                      labels=genotype_names_legend)+
+  theme(legend.title = element_text(face='bold', size=16))+
+  theme(legend.title.align = 0.5)+
+  theme(legend.position = 'right')+
+  theme(legend.key.width = unit(1, 'cm'))+
+  theme(legend.key.height = unit(1, 'cm'))+
+  theme(legend.text = element_text(size=12))
+```
+
+```{r Exp 2 Spacer plot setup, warning=F, message=F, include=F}
+exp2_spacers_plot = ggplot(exp2_spacers, aes(y=mean.total.spacers, x=bottleneck))+
+  geom_boxplot()+
+  labs(x='Bottleneck size', y="Spacer number")+
+  #ggtitle('Spacers in both CRISPR loci\nin CRISPR clones')+
+  theme_bw()+
+  
+  theme(plot.title = element_text(face="bold", hjust=0.5, size = 20))+
+  theme(axis.title = element_text(face='bold', size=16))+
+  
+  scale_x_discrete(breaks=exp_2_OG_bottleneck, labels=exp2_bottleneck_names_legend)+
+  theme(axis.text = element_text(size=12))+
+  
+  scale_y_continuous(breaks = c(seq(1,4.5,0.5)))+
+  coord_cartesian(ylim=c(1.0000,4.5625))
+  
+```
+
+```{r Exp 2 Phage at t3 setup, warning=F, message=F, include=F}
+exp2_phage_t3_plot <- ggplot(data=subset(exp1_phage, timepoint=='t3'), aes(x=bottleneck, y=Mean, group=Measurement))+
+  geom_errorbar(aes(ymin=Lower, ymax=Upper), width=0.1, size=0.7, position=pd)+
+  geom_point(stat="identity", aes(shape=Measurement, size = 0.3), position=pd)+
+  labs(x='Bottleneck size', y=expression(bold("Log-10 p.f.u ml"*{}^{-1}*"")))+
+  #ggtitle("Phage titers at t3 of evolution bottleneck experiment")+
+  theme_bw()+
+  theme(plot.title = element_text(face="bold", hjust=0.5, size = 16))+
+  theme(axis.title = element_text(face="bold", size=14))+
+  theme(axis.text = element_text(size=14))+
+  theme(legend.position = 'none')+
+  
+  scale_y_continuous(breaks = c(seq(0,11,1)))+
+  scale_x_discrete(breaks=exp_2_OG_bottleneck, labels=exp2_bottleneck_names_legend)
+
+
+```
+
+```{r Make Figure 5, include=F}
+bottom_row_fig5 = plot_grid(exp2_spacers_plot+theme(plot.margin = unit(c(5.5, 35, 5.5, 5.5), 'pt')), 
+                            exp2_phage_t3_plot,
+                            labels = c('B', 'C'))
+
+fig_5 = plot_grid(exp2_pheno_plot+theme(plot.margin = unit(c(.5, .5, .8, .5), 'cm')), bottom_row_fig3,
+                  ncol = 1, labels = c('A', ''),
+                  rel_widths = c(1,1.3))
+```
+
+```{r Print and save Fig 5, fig.width=9, fig.height=6.4, dev='png', echo=FALSE}
+fig_5
+
+ggsave('Fig 5.png', fig_5, device='png',
+       path = '.', width = 25, height = 20, unit=c('cm'), dpi=300)
+
+```
+
+
+
+# Experiment 3
+
+## Figure 6: Change in phage titers in each bottleneck treatment, by replicate
+```{r Exp 3 Data, include=F}
+## Read in all the data needed for Experiment 1 graphs
+
+# Summarised phage data for Experiment 1, and format it so the graphs are produced correctly
+exp3_phage = read.csv('./data/exp3_counts_summary.csv', header=T)
+exp3_phage$bottleneck = as.factor(exp3_phage$bottleneck)
+exp3_phage = subset(exp3_phage, timepoint != '')
+#set the bottleneck treatment as a factor
+exp3_phage$bottleneck = as.factor(exp3_phage$bottleneck)
+exp3_phage$ID = as.factor(exp3_phage$ID)
+# make new columns in the data for log-transformed pfu and cfu counts
+# adds one to account for zero values
+exp3_phage$pfu               = exp3_phage$pfu + 1
+exp3_phage$log.pfu           = log10(exp3_phage$pfu)
+
+exp3_phage$bottleneck = relevel(exp3_phage$bottleneck, ref='5-clone')
+exp3_phage$bottleneck = relevel(exp3_phage$bottleneck, ref='monoculture')
+
+# Phenotype data 
+exp3_pheno = read.csv('./data/exp3_phenotype_results.csv', header=T)
+
+exp3_pheno_m = melt(exp3_pheno, id.vars = c('bottleneck', 'repeat.'), measure.vars = c('prop.CRISPR', 'prop.SM', 'prop.Sensitive'))
+exp3_pheno_m$bottleneck = as.factor(exp3_pheno_m$bottleneck)
+exp3_pheno_m$repeat. = as.factor(exp3_pheno_m$repeat.)
+
+# Spacer data
+exp3_spacers = read.csv('./data/exp3_spacers.csv')
+exp3_spacers$bottleneck = as.factor(exp3_spacers$bottleneck)
+
+exp3_spacers$bottleneck = relevel(exp3_spacers$bottleneck, ref='monoculture')
+```
+
+```{r Exp 3 Phage titer plot setup, include=F}
+mono_phage_plot = ggplot(aes(y=pfu, x=timepoint, group=ID), 
+                         data=subset(exp3_phage, bottleneck == 'monoculture'))+
+  
+  geom_point(stat='identity', position=pd)+
+  geom_path(stat='identity', position=pd)+
+  
+  labs(x='Days post-infection (d.p.i.)', y=expression(bold("P.f.u ml"*{}^{-1}*"")))+
+  ggtitle('Monoculture')+
+  
+  scale_y_continuous(trans = 'log10',
+                    breaks = trans_breaks("log10", function(x) 10^x),
+                    labels = trans_format("log10", math_format(10^.x)),
+                    limits = c(NA,1e+12))+
+  
+  
+  theme_bw()+
+  scale_colour_discrete(name='Replicate',
+                        breaks = monoculture_IDs,
+                        labels = exp3_replicate_names_legend)+
+  theme(plot.title = element_text(face="bold", hjust=0, size = 16))+
+  theme(axis.title = element_text(face="bold", size=16))+
+  theme(legend.title = element_text(face='bold', size=14))+
+  theme(legend.title.align = 0.5)+
+  theme(legend.position = 'right')+
+  theme(legend.key.width = unit(2, 'cm'))+
+  theme(legend.key.height = unit(0.5, 'cm'))+
+  theme(strip.text = element_text(face='bold', size=14))+
+  
+  scale_x_discrete(breaks=c('t0', 't1', 't2', 't3', 't4', 't5'),
+                   labels=c('0', '1', '2', '3', '4', '5'))+
+  
+  theme(axis.text = element_text(size=12))+
+  theme(legend.text = element_text(size=12))
+
+mono_phage_plot
+
+fiveclone_phage_plot = ggplot(aes(y=pfu, x=timepoint, group=ID), 
+                         data=subset(exp3_phage, bottleneck == '5-clone'))+
+  
+  geom_point(stat='identity', position=pd)+
+  geom_path(stat='identity', position=pd)+
+  
+  labs(x='Days post-infection (d.p.i.)', y=expression(bold("P.f.u ml"*{}^{-1}*"")))+
+  ggtitle('5-clone')+
+  
+  #facet_wrap(~bottleneck, labeller = bottleneck_labeller)+
+  
+  scale_y_continuous(trans = log10_trans(),
+                     breaks = trans_breaks("log10", function(x) 10^x),
+                     labels = trans_format("log10", math_format(10^.x)))+
+  
+  theme_bw()+
+  scale_colour_discrete(name='Replicate',
+                        breaks = fiveclone_IDs,
+                        labels = exp3_replicate_names_legend)+
+  theme(plot.title = element_text(face="bold", hjust=0, size = 16))+
+  theme(axis.title = element_text(face="bold", size=16))+
+  theme(legend.title = element_text(face='bold', size=14))+
+  theme(legend.title.align = 0.5)+
+  theme(legend.position = 'right')+
+  theme(legend.key.width = unit(2, 'cm'))+
+  theme(legend.key.height = unit(0.5, 'cm'))+
+  theme(strip.text = element_text(face='bold', size=14))+
+  
+  scale_x_discrete(breaks=c('t0', 't1', 't2', 't3', 't4', 't5'),
+                   labels=c('0', '1', '2', '3', '4', '5'))+
+  
+  theme(axis.text = element_text(size=12))+
+  theme(legend.text = element_text(size=12))
+
+fiveclone_phage_plot
+
+fiftyclone_phage_plot = ggplot(aes(y=pfu, x=timepoint, group=ID), 
+                         data=subset(exp3_phage, bottleneck == '50-clone'))+
+  
+  geom_point(stat='identity', position=pd)+
+  geom_path(stat='identity', position=pd)+
+  
+  labs(x='Days post-infection (d.p.i.)', y=expression(bold("P.f.u ml"*{}^{-1}*"")))+
+  ggtitle('50-clone')+
+  
+  
+  #facet_wrap(~bottleneck, labeller = bottleneck_labeller)+
+  
+
+  scale_y_continuous(trans = log10_trans(),
+                     breaks = trans_breaks("log10", function(x) 10^x),
+                     labels = trans_format("log10", math_format(10^.x)),
+                     limit = c(NA, 1e+12))+
+  
+  theme_bw()+
+  scale_colour_discrete(name='Replicate',
+                        breaks = fiftyclone_IDs,
+                        labels = exp3_replicate_names_legend)+
+  theme(plot.title = element_text(face="bold", hjust=0, size = 16))+
+  theme(axis.title = element_text(face="bold", size=16))+
+  theme(legend.title = element_text(face='bold', size=14))+
+  theme(legend.title.align = 0.5)+
+  theme(legend.position = 'right')+
+  theme(legend.key.width = unit(2, 'cm'))+
+  theme(legend.key.height = unit(0.5, 'cm'))+
+  theme(strip.text = element_text(face='bold', size=14))+
+  
+  scale_x_discrete(breaks=c('t0', 't1', 't2', 't3', 't4', 't5'),
+                   labels=c('0', '1', '2', '3', '4', '5'))+
+  
+  theme(axis.text = element_text(size=12))+
+  theme(legend.text = element_text(size=12))
+
+fiftyclone_phage_plot
+
+## Arrange all the phage titer plots into one using plot_grid
+mono_phage_plot = mono_phage_plot + theme(plot.margin = unit(c(2,2,0,1), 'pt'))
+fiveclone_phage_plot = fiveclone_phage_plot + theme(plot.margin = unit(c(2,2,0,1), 'pt'))
+fiftyclone_phage_plot = fiftyclone_phage_plot + theme(plot.margin = unit(c(0,2,1,1), 'pt'))
+
+exp3_phage_plot = plot_grid(mono_phage_plot+labs(x='')+theme(legend.position = 'none'), 
+          fiveclone_phage_plot+labs(y='', x='')+theme(legend.position = 'none'), 
+          fiftyclone_phage_plot+theme(legend.position = 'none'),
+          ncol = 2, nrow=2, align = 'v', axis='l', rel_widths = c(.3,.3,.3,3), rel_heights = c(.3,.3,.3,3))
+
+```
+
+```{r Exp 3 Phage titer plot print & save, dev='png',echo=FALSE }
+exp3_phage_plot
+
+ggsave('Fig 6.png', exp3_phage_plot, device = 'png',
+       path = '.', width=25, height=15, unit=c('cm'), dpi=300)
+
+```
+
+
+## Figure 7: Phenotype and spacers at t=3
+
+```{r Exp 3 Phenoytpe plot set-up, include=FALSE}
+exp3_pheno_plot <- ggplot(data=exp3_pheno_m, aes(x=bottleneck, y=value))+
+  geom_boxplot(aes(fill=variable))+
+  labs(x='Bottleneck size', y='Proportion')+
+  #ggtitle("Phenotype summary")+
+  theme_bw()+
+  theme(plot.title = element_text(face="bold", hjust=0.5, size = 16))+
+  theme(axis.title = element_text(face='bold', size=16))+
+  
+  scale_x_discrete(breaks=exp3_OG_bottleneck, labels=exp3_bottleneck_names_legend)+
+  theme(axis.text = element_text(size=12))+
+  
+  scale_fill_discrete(name='Genotype',
+                      breaks=OG_genotypes,
+                      labels=genotype_names_legend)+
+  theme(legend.title = element_text(face='bold', size=16))+
+  theme(legend.title.align = 0.5)+
+  theme(legend.position = 'right')+
+  theme(legend.key.width = unit(1, 'cm'))+
+  theme(legend.key.height = unit(1, 'cm'))+
+  theme(legend.text = element_text(size=12))
+
+```
+
+```{r Exp3 Spacer plot set-up, dev='png',include=FALSE}
+exp3_spacers_plot = ggplot(exp3_spacers, aes(y=mean.total.spacers, x=bottleneck))+
+  geom_boxplot(na.rm = F)+
+  labs(x='Bottleneck size', y="Spacer number")+
+  #ggtitle('Spacers in both CRISPR loci\nin CRISPR clones')+
+  theme_bw()+
+  
+  theme(plot.title = element_text(face="bold", hjust=0.5, size = 20))+
+  theme(axis.title = element_text(face='bold', size=16))+
+  
+  scale_x_discrete(breaks=exp3_OG_bottleneck, labels=exp3_bottleneck_names_legend)+
+  theme(axis.text = element_text(size=12))+
+  
+  scale_y_continuous(breaks = c(seq(0,4.5,0.5)))
+```
+
+```{r, Make Figure 7, include=FALSE}
+fig_7 = plot_grid(exp3_pheno_plot+theme(plot.margin = unit(c(.5, .5, .8, .5), 'cm')),
+                  exp3_spacers_plot+theme(plot.margin = unit(c(5.5, 35, 5.5, 5.5), 'pt')),
+                  ncol = 1, nrow=2, labels = c('A', 'B'),
+                  rel_widths = c(1,1))
+
+```
+
+```{r, Print and save Fig 7, fig.width=8, fig.height=8, echo=FALSE}
+fig_7
+
+ggsave('Fig 7.png', fig_7, device='png',
+       path = '.', width = 15, height = 20, unit=c('cm'), dpi=300)
+
+```
