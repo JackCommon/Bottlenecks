@@ -147,7 +147,7 @@ pd = position_dodge(0.1)
 phage <- read.csv("./Plate_bn_exp_2/data/plate2_counts.csv", header = T)
 phage <- select(phage, -cfu)
 phage$ID %<>% as.factor()
-phage %<>% na.exclude
+#phage %<>% na.exclude
 phage$log.pfu <- log10(phage$pfu+1)
 
 mono_phage_plot = ggplot(aes(y=log.pfu, x=timepoint, group=ID), 
