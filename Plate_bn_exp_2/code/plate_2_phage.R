@@ -10,6 +10,11 @@ library(dplyr)
 library(tidyr)
 library(magrittr)
 library(cowplot)
+library(survival)
+library(rms)
+library(car)
+library(multcomp)
+library(relaimpo)
 
 # Extracts the intercept coefficient (mean) and 95% CIs from the GLM objects, with added functionality to copy those to the clipboard for easier input to summary dataframes
 
@@ -144,7 +149,7 @@ plate_bottleneck_labeller = function(variable, value) {
 pd = position_dodge(0.1)
 
 # Load data and format data
-phage <- read.csv("./Plate_bn_exp_2/data/plate2_counts.csv", header = T)
+phage <- read.csv("./Plate_bn_exp_2/original_data/plate2_counts.csv", header = T)
 phage <- select(phage, -cfu)
 phage$ID %<>% as.factor()
 #phage %<>% na.exclude
@@ -252,7 +257,67 @@ mono_phage_plot <- mono_phage_plot + theme(plot.margin = unit(c(2,2,0,1), 'pt'))
 fiveclone_phage_plot <- fiveclone_phage_plot + theme(plot.margin = unit(c(2,2,0,1), 'pt'))
 fiftyclone_phage_plot <- fiftyclone_phage_plot + theme(plot.margin = unit(c(0,2,2,1), 'pt'))
 
-sum.fig <- plot_grid(mono_phage_plot+labs(x='')+theme(legend.position = 'none'), 
+all.phage.fig <- plot_grid(mono_phage_plot+labs(x='')+theme(legend.position = 'none'), 
                    fiveclone_phage_plot+labs(y='', x='')+theme(legend.position = 'none'), 
                    fiftyclone_phage_plot+theme(legend.position = 'none'))
-sum.fig
+all.phage.fig
+
+ggsave('all_phage.png', all.phage.fig, device = 'png',
+       path = './Plate_bn_exp_2/figs/', width=27, height=17, unit=c('cm'), dpi=300)
+
+
+#### Phage survival analysis
+phage<-read.csv("./Plate_bn_exp_2/summary_data/survival_data.csv", header=T)
+attach(phage)
+names(phage)
+
+summary(KM<-survfit(Surv(time_to_death,status)~1))
+plot(KM, ylab="Survivorship", xlab="Transfer")
+
+# KM ~ group
+summary(KM<-survfit(Surv(time_to_death,status)~bottleneck))
+
+jpeg("survplot.jpg", width=20, height=15, units="in", res=300)
+par(mfrow=c(1,1), xpd=TRUE, oma=c(1.5,2.5,1,1), mai=c(1,1,1,1.2), bty="l", pty="s")
+
+plot(survfit(Surv(phage$time_to_death,phage$status)~bottleneck), lty=c(1,3,5), lwd=c(5,5,5), ylab="", xlab="", axes=FALSE, ylim=c(0,1), xlim=c(0,5))
+
+axis(1, tcl=-0.1, pos=0, cex.axis=1, lwd=c(3), cex.axis=2)
+axis(1, at=2.5, lab="Days post-infection (d.p.i.)", tcl=0, line=2, cex.axis=3)
+
+axis(2, tcl=-0.1, pos=-0, cex.axis=1, las=2, lwd=c(3), cex.axis = 2)
+axis(2, at=0.5, lab="Proportion of phage\npopulations surviving", line=4, cex.axis=3, tcl=0)
+
+legend(0.8,0.5, title=c("Bottleneck"),
+       legend=c("1-clone", "5-clone", "50-clone"), 
+       bty="o", lty=c(1,3,5), lwd=c(5,5,5), cex=3, adj=0)
+dev.off()
+
+# Cox proportional hazards model
+model3<-coxph(Surv(time_to_death,status)~bottleneck)
+summary(model3)
+
+model3$loglik
+
+anova(model3)
+tapply(predict(model3),bottleneck,mean)
+
+exp1.tukey <- summary(glht(model3, linfct = mcp(bottleneck = "Tukey")))
+class(exp(exp1.tukey$test$coefficients))
+exp1.tukey
+exp1.tukey$test$coefficients
+exp1.tukey$test$tstat
+exp1.tukey$test$pvalues
+
+HRs <- exp(exp1.tukey$test$coefficients)
+SEs <- exp(exp1.tukey$test$sigma)
+Z <- exp1.tukey$test$tstat
+P <- exp1.tukey$test$pvalues
+
+exp1.HRs <- data.frame(HRs, SEs, Z, P)
+clip = pipe('pbcopy', 'w')
+write.table(exp1.HRs, file=clip, sep='\t', row.names = F, col.names = F)
+close(clip)
+
+plot(survfit(model3), lty=c(1,2,3))
+
