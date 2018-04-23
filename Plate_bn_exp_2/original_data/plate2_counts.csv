@@ -109,7 +109,7 @@ ID,bottleneck,timepoint,pfu,cfu
 12,50-clone,t2,1.80E+05,
 1,1-clone,t3,5.80E+09,
 2,1-clone,t3,0.00E+00,
-3,1-clone,t3,3.60E-09,
+3,1-clone,t3,3.60E+09,
 4,1-clone,t3,0.00E+00,
 5,1-clone,t3,4.60E+10,
 6,1-clone,t3,0.00E+00,
