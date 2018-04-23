@@ -10,11 +10,6 @@ library(dplyr)
 library(tidyr)
 library(magrittr)
 library(cowplot)
-library(survival)
-library(rms)
-library(car)
-library(multcomp)
-library(relaimpo)
 
 # Extracts the intercept coefficient (mean) and 95% CIs from the GLM objects, with added functionality to copy those to the clipboard for easier input to summary dataframes
 
@@ -262,11 +257,19 @@ all.phage.fig <- plot_grid(mono_phage_plot+labs(x='')+theme(legend.position = 'n
                    fiftyclone_phage_plot+theme(legend.position = 'none'))
 all.phage.fig
 
+detach("package:cowplot")
+
 ggsave('all_phage.png', all.phage.fig, device = 'png',
        path = './Plate_bn_exp_2/figs/', width=27, height=17, unit=c('cm'), dpi=300)
 
 
 #### Phage survival analysis
+library(survival)
+library(rms)
+library(car)
+library(multcomp)
+library(relaimpo)
+
 phage<-read.csv("./Plate_bn_exp_2/summary_data/survival_data.csv", header=T)
 attach(phage)
 names(phage)
