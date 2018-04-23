@@ -280,7 +280,7 @@ plot(KM, ylab="Survivorship", xlab="Transfer")
 # KM ~ group
 summary(KM<-survfit(Surv(time_to_death,status)~bottleneck))
 
-jpeg("survplot.jpg", width=20, height=15, units="in", res=300)
+jpeg("./figs/survplot.jpg", width=20, height=15, units="in", res=300)
 par(mfrow=c(1,1), xpd=TRUE, oma=c(1.5,2.5,1,1), mai=c(1,1,1,1.2), bty="l", pty="s")
 
 plot(survfit(Surv(phage$time_to_death,phage$status)~bottleneck), lty=c(1,3,5), lwd=c(5,5,5), ylab="", xlab="", axes=FALSE, ylim=c(0,1), xlim=c(0,5))
