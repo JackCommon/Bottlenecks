@@ -48,12 +48,12 @@ mod.g <- glm(value~variable*Bottleneck, data=spacer, family=binomial)
 
 AIC(mod.null, mod.1, mod.2, mod.g) %>% compare_AICs()
 anova(mod.g, test="Chisq")
-summary(mod.1)
+summary(mod.g)
 
-pchisq(mod.1$deviance, mod.1$df.residual)
-model.tables(aov(mod.1), "mean")
+pchisq(mod.g$deviance, mod.g$df.residual)
+model.tables(aov(mod.g), "mean")
 
-# Models including replicate
+# Models including replicate for Single or Multiple spacers
 
 mod.null <- glm(value~1, data=spacer2, family = binomial)
 mod.1 <- glm(value~variable, data=spacer2, family = binomial)
@@ -69,6 +69,6 @@ AIC(mod.null, mod.1, mod.2, mod.3,
 anova(mod.g, test="Chisq")
 pchisq(mod.2$deviance, mod.2$df.residual)
 
-summary(mod.2)
+summary(mod.4)
 
 model.tables(aov(mod.2), "mean")
