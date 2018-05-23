@@ -22,11 +22,6 @@ compare_AICs = function(df){          # df is a dataframe of AIC values
 }
 
 ### Convert log-odds to probabilities from binomial GLM output
-logit2prob <- function(logit){
-  odds <- exp(logit)
-  prob <- odds / (1 + odds)
-  return(prob)
-}
 
 # Data
 pheno <- read.csv('./Plate_bn_exp_2/original_data/phenotype_1.csv', header=T)
