@@ -3,14 +3,18 @@
 
 rm(list=ls())
 
+#### Dependencies ####
 library(ggplot2)
 library(scales)
 library(reshape2)
+library(plyr)
 library(dplyr)
 library(tidyr)
 library(magrittr)
 library(cowplot)
+library(lme4)
 
+#### Functions ####
 # Extracts the intercept coefficient (mean) and 95% CIs from the GLM objects, with added functionality to copy those to the clipboard for easier input to summary dataframes
 
 # Enable this if using Ubuntu
@@ -143,26 +147,61 @@ plate_bottleneck_labeller = function(variable, value) {
 
 pd = position_dodge(0.1)
 
-# Load data and format data
+#### Load and format data ####
 phage <- read.csv("./Plate_bn_exp_2/original_data/plate2_counts.csv", header = T)
-phage <- select(phage, -cfu)
+phage <- select(phage, -raw.count, -dilution)
 phage$ID %<>% as.factor()
 #phage %<>% na.exclude
-phage$log.pfu <- log10(phage$pfu+1)
+#$log.pfu <- log10(phage$pfu+1)
 
-mono_phage_plot = ggplot(aes(y=log.pfu, x=timepoint, group=ID), 
-                         data=subset(phage, bottleneck == '1-clone'))+
+## Melt data for raw value plots
+phageM <- melt(phage, measure.vars = c("pfu", "cfu"))
+phageM <- plyr::rename(phageM, c("variable"="measurement"))
+
+phageIDs <- c("p1", "p2", "p3", "p4",
+              "p5", "p6", "p7", "p8",
+              "p9", "p10", "p11", "p12") %>% 
+  rep( (length(phageM$ID)/2)/12 )
+hostIDs <- c("h1", "h2", "h3", "h4",
+             "h5", "h6", "h7", "h8",
+             "h9", "h10", "h11", "h12") %>% 
+  rep( (length(phageM$ID)/2)/12 )
+
+ID2 <- c(phageIDs, hostIDs)
+
+phageM$ID2 <- as.factor(ID2)
+
+## 1-clone plot ####
+mono_plot <- ggplot(aes(y=value+1, x=timepoint, group=ID2), 
+                   data=subset(phageM, bottleneck == '1-clone'))+
   
-  geom_point(stat='identity', position=pd)+
-  geom_path(stat='identity', position=pd)+
+  geom_path(stat='identity', 
+            aes(colour=measurement, linetype=measurement),
+            position=pd)+
+  scale_colour_manual(name='Measurement',
+                      values =c("black", "grey"),
+                      breaks = c("pfu", "cfu"),
+                      labels = c("Phage", "Host"))+
+  scale_linetype_manual(name='Measurement',
+                        values=c(1, 2),
+                        breaks = c("pfu", "cfu"),
+                        labels = c("Phage", "Host"))+
+  geom_point(stat='identity', 
+             aes(shape=measurement, fill=measurement), colour="transparent",
+             position=pd)+
+  scale_fill_manual(name='Measurement',
+                    values =c("black", "grey"),
+                    breaks = c("pfu", "cfu"),
+                    labels = c("Phage", "Host"))+
+  scale_shape_manual(name='Measurement',
+                     values = c(21,24),
+                     breaks = c("pfu", "cfu"),
+                     labels = c("Phage", "Host"))+
   
-  labs(x='Days post-infection (d.p.i.)', y=expression(bold("Log"*{}[bold("10")]*" p.f.u ml"*{}^{-1}*"")))+
+  labs(x='Days post-infection (d.p.i.)', y=expression(bold("P.f.u. ml"*{}^{-1}*"/ C.f.u. ml"*{}^{-1}*"")))+
   ggtitle('1-clone')+
   
-  theme_bw()+
-  scale_colour_discrete(name='Replicate',
-                        breaks = oneclone_IDs,
-                        labels = plate_replicate_names_legend)+
+  theme_cowplot()+
   theme(plot.title = element_text(face="bold", hjust=0, size = 16))+
   theme(axis.title = element_text(face="bold", size=16))+
   theme(legend.title = element_text(face='bold', size=14))+
@@ -174,28 +213,50 @@ mono_phage_plot = ggplot(aes(y=log.pfu, x=timepoint, group=ID),
   
   scale_x_discrete(breaks=c('t0', 't1', 't2', 't3', 't4', 't5'),
                    labels=c('0', '1', '2', '3', '4', '5'))+
-  
-  scale_y_continuous(breaks=c(seq(0,12,1)))+
-  coord_cartesian(ylim=c(0, 12))+
+  scale_y_continuous(trans = 'log10',
+                     breaks = trans_breaks('log10', function(x) 10^x),
+                     labels = trans_format('log10', math_format(10^.x)))+
   
   theme(axis.text = element_text(size=12))+
-  theme(legend.text = element_text(size=12))
-
-mono_phage_plot
-
-fiveclone_phage_plot = ggplot(aes(y=log.pfu, x=timepoint, group=ID), 
-                              data=subset(phage, bottleneck == '5-clone'))+
+  theme(legend.text = element_text(size=12))+
   
-  geom_point(stat='identity', position=pd)+
-  geom_path(stat='identity', position=pd)+
+  geom_hline(yintercept = 1e+2, linetype=2, colour="red")+
+  annotate("text", 1.5, 1e+2, vjust=-1, label="Detection limit", colour="red")
+
+quartz()
+mono_plot
+
+## 5-clone plot ####
+fiveclone_plot <- ggplot(aes(y=value+1, x=timepoint, group=ID2), 
+                                         data=subset(phageM, bottleneck == '5-clone'))+
   
-  labs(x='Days post-infection (d.p.i.)', y=expression(bold("Log"*{}[bold("10")]*" p.f.u ml"*{}^{-1}*"")))+
+  geom_path(stat='identity', 
+            aes(colour=measurement, linetype=measurement),
+            position=pd)+
+  scale_colour_manual(name='Measurement',
+                      values =c("black", "grey"),
+                      breaks = c("pfu", "cfu"),
+                      labels = c("Phage", "Host"))+
+  scale_linetype_manual(name='Measurement',
+                        values=c(1, 2),
+                        breaks = c("pfu", "cfu"),
+                        labels = c("Phage", "Host"))+
+  geom_point(stat='identity', 
+             aes(shape=measurement, fill=measurement), colour="transparent",
+             position=pd)+
+  scale_fill_manual(name='Measurement',
+                    values =c("black", "grey"),
+                    breaks = c("pfu", "cfu"),
+                    labels = c("Phage", "Host"))+
+  scale_shape_manual(name='Measurement',
+                     values = c(21,24),
+                     breaks = c("pfu", "cfu"),
+                     labels = c("Phage", "Host"))+
+  
+  labs(x='Days post-infection (d.p.i.)', y=expression(bold("P.f.u. ml"*{}^{-1}*"/ C.f.u. ml"*{}^{-1}*"")))+
   ggtitle('5-clone')+
   
-  theme_bw()+
-  scale_colour_discrete(name='Replicate',
-                        breaks = fiveclone_IDs,
-                        labels = plate_replicate_names_legend)+
+  theme_cowplot()+
   theme(plot.title = element_text(face="bold", hjust=0, size = 16))+
   theme(axis.title = element_text(face="bold", size=16))+
   theme(legend.title = element_text(face='bold', size=14))+
@@ -207,27 +268,49 @@ fiveclone_phage_plot = ggplot(aes(y=log.pfu, x=timepoint, group=ID),
   
   scale_x_discrete(breaks=c('t0', 't1', 't2', 't3', 't4', 't5'),
                    labels=c('0', '1', '2', '3', '4', '5'))+
-  scale_y_continuous(breaks=c(seq(0,12,1)))+
-  coord_cartesian(ylim=c(0,12))+
+  scale_y_continuous(trans = 'log10',
+                     breaks = trans_breaks('log10', function(x) 10^x),
+                     labels = trans_format('log10', math_format(10^.x)))+
   
   theme(axis.text = element_text(size=12))+
-  theme(legend.text = element_text(size=12))
-
-fiveclone_phage_plot
-
-fiftyclone_phage_plot = ggplot(aes(y=log.pfu, x=timepoint, group=ID), 
-                               data=subset(phage, bottleneck == '50-clone'))+
+  theme(legend.text = element_text(size=12))+
   
-  geom_point(stat='identity', position=pd)+
-  geom_path(stat='identity', position=pd)+
+  geom_hline(yintercept = 1e+2, linetype=2, colour="red")+
+  annotate("text", 1.5, 1e+2, vjust=-1, label="Detection limit", colour="red")
+
+
+fiveclone_plot
+## 50-clone plot ####
+fiftyclone_plot <- ggplot(aes(y=value+1, x=timepoint, group=ID2), 
+                                          data=subset(phageM, bottleneck == '50-clone'))+
   
-  labs(x='Days post-infection (d.p.i.)', y=expression(bold("Log"*{}[bold("10")]*" p.f.u ml"*{}^{-1}*"")))+
+  geom_path(stat='identity', 
+            aes(colour=measurement, linetype=measurement),
+            position=pd)+
+  scale_colour_manual(name='Measurement',
+                      values =c("black", "grey"),
+                      breaks = c("pfu", "cfu"),
+                      labels = c("Phage", "Host"))+
+  scale_linetype_manual(name='Measurement',
+                        values=c(1, 2),
+                        breaks = c("pfu", "cfu"),
+                        labels = c("Phage", "Host"))+
+  geom_point(stat='identity', 
+             aes(shape=measurement, fill=measurement), colour="transparent",
+             position=pd)+
+  scale_fill_manual(name='Measurement',
+                    values =c("black", "grey"),
+                    breaks = c("pfu", "cfu"),
+                    labels = c("Phage", "Host"))+
+  scale_shape_manual(name='Measurement',
+                     values = c(21,24),
+                     breaks = c("pfu", "cfu"),
+                     labels = c("Phage", "Host"))+
+  
+  labs(x='Days post-infection (d.p.i.)', y=expression(bold("P.f.u. ml"*{}^{-1}*"/ C.f.u. ml"*{}^{-1}*"")))+
   ggtitle('50-clone')+
   
-  theme_bw()+
-  scale_colour_discrete(name='Replicate',
-                        breaks = fiftyclone_IDs,
-                        labels = plate_replicate_names_legend)+
+  theme_cowplot()+
   theme(plot.title = element_text(face="bold", hjust=0, size = 16))+
   theme(axis.title = element_text(face="bold", size=16))+
   theme(legend.title = element_text(face='bold', size=14))+
@@ -239,31 +322,37 @@ fiftyclone_phage_plot = ggplot(aes(y=log.pfu, x=timepoint, group=ID),
   
   scale_x_discrete(breaks=c('t0', 't1', 't2', 't3', 't4', 't5'),
                    labels=c('0', '1', '2', '3', '4', '5'))+
-  scale_y_continuous(breaks=c(seq(0,12,1)))+
-  coord_cartesian(ylim=c(0, 12.07918))+
+  scale_y_continuous(trans = 'log10',
+                     breaks = trans_breaks('log10', function(x) 10^x),
+                     labels = trans_format('log10', math_format(10^.x)))+
   
   theme(axis.text = element_text(size=12))+
-  theme(legend.text = element_text(size=12))
+  theme(legend.text = element_text(size=12))+
+  
+  geom_hline(yintercept = 1e+2, linetype=2, colour="red")+
+  annotate("text", 1.5, 1e+2, vjust=-1, label="Detection limit", colour="red")
 
-fiftyclone_phage_plot
 
-## Arrange all the phage titer plots into one using plot_grid
-mono_phage_plot <- mono_phage_plot + theme(plot.margin = unit(c(2,2,0,1), 'pt'))
-fiveclone_phage_plot <- fiveclone_phage_plot + theme(plot.margin = unit(c(2,2,0,1), 'pt'))
-fiftyclone_phage_plot <- fiftyclone_phage_plot + theme(plot.margin = unit(c(0,2,2,1), 'pt'))
+fiftyclone_plot
 
-all.phage.fig <- plot_grid(mono_phage_plot+labs(x='')+theme(legend.position = 'none'), 
-                   fiveclone_phage_plot+labs(y='', x='')+theme(legend.position = 'none'), 
-                   fiftyclone_phage_plot+theme(legend.position = 'none'))
-all.phage.fig
+## Arrange and save raw plots ####
+mono_plot <- mono_plot + theme(plot.margin = unit(c(2,2,0,1), 'pt'))
+fiveclone_plot <- fiveclone_plot + theme(plot.margin = unit(c(2,2,0,1), 'pt'))
+fiftyclone_plot <- fiftyclone_plot + theme(plot.margin = unit(c(0,2,2,1), 'pt'))
+
+raw_fig <- plot_grid(mono_plot+labs(x='')+theme(legend.position = 'none'), 
+                   fiveclone_plot+labs(y='', x='')+theme(legend.position = 'none'), 
+                   fiftyclone_plot+theme(legend.position = 'none'))
+quartz()
+raw_fig
 
 detach("package:cowplot")
 
-ggsave('all_phage.png', all.phage.fig, device = 'png',
+ggsave('all_raw.png', raw_fig, device = 'png',
        path = './Plate_bn_exp_2/figs/', width=27, height=17, unit=c('cm'), dpi=300)
 
 
-#### Phage survival analysis
+#### Phage survival analysis ####
 library(survival)
 library(rms)
 library(car)
@@ -324,3 +413,23 @@ close(clip)
 
 plot(survfit(model3), lty=c(1,2,3))
 
+
+#### GLMMs ####
+phage$log.pfu <- log(phage$pfu+1)
+
+m1 <- glmer.nb(log.pfu~timepoint+(1|ID), data=phage)
+m2 <- glmer.nb(log.pfu~bottleneck+(1|ID), data=phage)
+m3 <- glmer.nb(log.pfu~bottleneck*timepoint+(1|ID), data=phage)
+m4 <- glmer.nb(log.pfu~bottleneck+(bottleneck|ID), data=phage)
+m5 <- glmer.nb(log.pfu~bottleneck+(timepoint|ID), data=phage)
+
+plot(m1)
+plot(m2)
+plot(m3)
+plot(m4)
+plot(m5)
+AIC(m1, m2, m3, m4, m5) %>% compare_AICs()
+
+summary(m3)
+anova(m1, m2, m3, m4, m5, test="Chisq")
+var(phage$log.pfu)
