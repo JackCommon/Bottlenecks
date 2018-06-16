@@ -1,5 +1,5 @@
-### Plate Bottleneck Experiment 2 Analysis
-# Created: 15/4/18 by Jack Common
+### Dilution Experiment 2 Phage & Host Population Analysis
+# Created: 15/6/18 by Jack Common
 
 rm(list=ls())
 
@@ -119,61 +119,35 @@ timepoint_labeller = function(variable, value) {
   return(timepoint_names_facet[value])
 }
 
-# These vectors just give tidy labels for the figures for experiment 3
-oneclone_IDs <- c('M.1', 'M.2', 'M.3', 'M.4', 'M.5', 'M.6')
-fiveclone_IDs <- c('5.1', '5.2', '5.3', '5.4', '5.5', '5.6')
-fiftyclone_IDs <- c('50.1', '50.2', '50.3', '50.4', '50.5', '50.6')
-
-plate_replicate_names_legend = c('1', '2', '3', '4', '5', '6')
-
-plate_OG_bottleneck = c('1-clone', '5-clone', '50-clone')
-
-plate_bottleneck_names_facet = list(
-  '1-clone'      = expression('1-clone'),
-  '5-clone'          = expression('5-clone'),
-  '50-clone'         = expression('50-clone')
-)
-
-plate_bottleneck_names_legend = c(
-  expression('1-clone'), 
-  expression('5-clone'), 
-  expression('50-clone')
-)
-
-# Function for experiment 3 bottleneck labelling
-plate_bottleneck_labeller = function(variable, value) {
-  return(plate_bottleneck_names_facet[value])
-}
-
-pd = position_dodge(0.1)
+pd <- position_dodge(0.1)
 
 #### Load and format data ####
-phage <- read.csv("./Plate_bn_exp_2/original_data/plate2_counts.csv", header = T)
-phage <- select(phage, -raw.count, -dilution)
-phage$ID %<>% as.factor()
-#phage %<>% na.exclude
+data <- read.csv("./Revisions/original_data/dilution_counts.csv", header = T)
+data <- select(data, -raw, -dilution, -MOI)
+data$ID %<>% as.factor()
+data %<>% na.exclude
 #$log.pfu <- log10(phage$pfu+1)
 
 ## Melt data for raw value plots
-phageM <- melt(phage, measure.vars = c("pfu", "cfu"))
-phageM <- plyr::rename(phageM, c("variable"="measurement"))
+dataM <- melt(data, measure.vars = c("pfu", "cfu"))
+dataM <- plyr::rename(dataM, c("variable"="measurement"))
+dataM$treatment %<>% relevel(ref="S")
 
-phageIDs <- c("p1", "p2", "p3", "p4",
-              "p5", "p6", "p7", "p8",
-              "p9", "p10", "p11", "p12") %>% 
-  rep( (length(phageM$ID)/2)/12 )
-hostIDs <- c("h1", "h2", "h3", "h4",
-             "h5", "h6", "h7", "h8",
-             "h9", "h10", "h11", "h12") %>% 
-  rep( (length(phageM$ID)/2)/12 )
+phageIDs <- c("p1", "p2", "p3",
+              "p4", "p5", "p6") %>% 
+  rep( (length(dataM$ID)/2)/6 )
+
+hostIDs <- c("h1", "h2", "h3",
+             "h4", "h5", "h6") %>% 
+  rep( (length(dataM$ID)/2)/6 )
 
 ID2 <- c(phageIDs, hostIDs)
 
-phageM$ID2 <- as.factor(ID2)
+dataM$ID2 <- as.factor(ID2)
 
-## 1-clone plot ####
-mono_plot <- ggplot(aes(y=value+1, x=timepoint, group=ID2), 
-                   data=subset(phageM, bottleneck == '1-clone'))+
+## Raw figure ####
+raw_plot <- ggplot(aes(y=value+1, x=timepoint, group=ID2), 
+                    data=dataM)+
   
   geom_path(stat='identity', 
             aes(colour=measurement, linetype=measurement),
@@ -199,7 +173,8 @@ mono_plot <- ggplot(aes(y=value+1, x=timepoint, group=ID2),
                      labels = c("Phage", "Host"))+
   
   labs(x='Days post-infection (d.p.i.)', y=expression(bold("P.f.u. ml"*{}^{-1}*"/ C.f.u. ml"*{}^{-1}*"")))+
-  ggtitle('1-clone')+
+  ggtitle('')+
+  facet_grid(~treatment)+
   
   theme_cowplot()+
   theme(plot.title = element_text(face="bold", hjust=0, size = 16))+
@@ -221,106 +196,6 @@ mono_plot <- ggplot(aes(y=value+1, x=timepoint, group=ID2),
   theme(legend.text = element_text(size=12))+
   
   geom_hline(yintercept = 1e+2, linetype=2, colour="red")+
-  annotate("text", 1.5, 1e+2, vjust=-1, label="Detection limit", colour="red")
-
+  annotate("text", 1.5, 1e+2, vjust=-1, label="Phage detection limit", colour="red")
 quartz()
-mono_plot
-
-## Arrange and save raw plots ####
-mono_plot <- mono_plot + theme(plot.margin = unit(c(2,2,0,1), 'pt'))
-fiveclone_plot <- fiveclone_plot + theme(plot.margin = unit(c(2,2,0,1), 'pt'))
-fiftyclone_plot <- fiftyclone_plot + theme(plot.margin = unit(c(0,2,2,1), 'pt'))
-
-raw_fig <- plot_grid(mono_plot+labs(x='')+theme(legend.position = 'none'), 
-                   fiveclone_plot+labs(y='', x='')+theme(legend.position = 'none'), 
-                   fiftyclone_plot+theme(legend.position = 'none'))
-quartz()
-raw_fig
-
-detach("package:cowplot")
-
-ggsave('all_raw.png', raw_fig, device = 'png',
-       path = './Plate_bn_exp_2/figs/', width=27, height=17, unit=c('cm'), dpi=300)
-
-
-#### Phage survival analysis ####
-library(survival)
-library(rms)
-library(car)
-library(multcomp)
-library(relaimpo)
-
-phage<-read.csv("./Plate_bn_exp_2/summary_data/survival_data.csv", header=T)
-attach(phage)
-names(phage)
-
-summary(KM<-survfit(Surv(time_to_death,status)~1))
-plot(KM, ylab="Survivorship", xlab="Transfer")
-
-# KM ~ group
-summary(KM<-survfit(Surv(time_to_death,status)~bottleneck))
-
-jpeg("./figs/survplot.jpg", width=20, height=15, units="in", res=300)
-par(mfrow=c(1,1), xpd=TRUE, oma=c(1.5,2.5,1,1), mai=c(1,1,1,1.2), bty="l", pty="s")
-
-plot(survfit(Surv(phage$time_to_death,phage$status)~bottleneck), lty=c(1,3,5), lwd=c(5,5,5), ylab="", xlab="", axes=FALSE, ylim=c(0,1), xlim=c(0,5))
-
-axis(1, tcl=-0.1, pos=0, cex.axis=1, lwd=c(3), cex.axis=2)
-axis(1, at=2.5, lab="Days post-infection (d.p.i.)", tcl=0, line=2, cex.axis=3)
-
-axis(2, tcl=-0.1, pos=-0, cex.axis=1, las=2, lwd=c(3), cex.axis = 2)
-axis(2, at=0.5, lab="Proportion of phage\npopulations surviving", line=4, cex.axis=3, tcl=0)
-
-legend(0.8,0.5, title=c("Bottleneck"),
-       legend=c("1-clone", "5-clone", "50-clone"), 
-       bty="o", lty=c(1,3,5), lwd=c(5,5,5), cex=3, adj=0)
-dev.off()
-
-# Cox proportional hazards model
-model3<-coxph(Surv(time_to_death,status)~bottleneck)
-summary(model3)
-
-model3$loglik
-
-anova(model3)
-tapply(predict(model3),bottleneck,mean)
-
-exp1.tukey <- summary(glht(model3, linfct = mcp(bottleneck = "Tukey")))
-class(exp(exp1.tukey$test$coefficients))
-exp1.tukey
-exp1.tukey$test$coefficients
-exp1.tukey$test$tstat
-exp1.tukey$test$pvalues
-
-HRs <- exp(exp1.tukey$test$coefficients)
-SEs <- exp(exp1.tukey$test$sigma)
-Z <- exp1.tukey$test$tstat
-P <- exp1.tukey$test$pvalues
-
-exp1.HRs <- data.frame(HRs, SEs, Z, P)
-clip = pipe('pbcopy', 'w')
-write.table(exp1.HRs, file=clip, sep='\t', row.names = F, col.names = F)
-close(clip)
-
-plot(survfit(model3), lty=c(1,2,3))
-
-
-#### GLMMs ####
-phage$log.pfu <- log(phage$pfu+1)
-
-m1 <- glmer.nb(log.pfu~timepoint+(1|ID), data=phage)
-m2 <- glmer.nb(log.pfu~bottleneck+(1|ID), data=phage)
-m3 <- glmer.nb(log.pfu~bottleneck*timepoint+(1|ID), data=phage)
-m4 <- glmer.nb(log.pfu~bottleneck+(bottleneck|ID), data=phage)
-m5 <- glmer.nb(log.pfu~bottleneck+(timepoint|ID), data=phage)
-
-plot(m1)
-plot(m2)
-plot(m3)
-plot(m4)
-plot(m5)
-AIC(m1, m2, m3, m4, m5) %>% compare_AICs()
-
-summary(m3)
-anova(m1, m2, m3, m4, m5, test="Chisq")
-var(phage$log.pfu)
+raw_plot
