@@ -67,7 +67,7 @@ spacer$Replicate %<>% as.factor()
 spacer %<>% filter(Total.spacers > 0)
 spacer %<>% select(-Zero)
 
-spacer2 <- select(spacer, ID, Replicate, Bottleneck, Single, Multiple)
+spacer2 <- select(spacer, ID, Replicate, Bottleneck, Single, Multiple, pfu)
 spacer2 <- melt(spacer2, measure.vars = c("Single", "Multiple"))
 
 #### Models ignoring replicate ####
@@ -131,7 +131,76 @@ spacer2$Spacers %<>% relevel(ref="Single")
 mod.g <- glm(value~Spacers*Bottleneck*Replicate, data=spacer2, family = binomial)
 CopyCIs(mod.g)
 
+### Models ####
+spacer$log.pfu <- log(spacer$pfu+1)
+
+mod.1 <- glmer(Single~log.pfu+(1|log.pfu), data=spacer,
+               family=binomial(link = "logit"))
+mod.2 <- glmer(Single~log.pfu*Bottleneck+(1|log.pfu), data=spacer,
+               family=binomial(link = "logit"))
+mod.3 <- glmer(Single~log.pfu+(1|Replicate), data=spacer,
+               family=binomial(link = "logit"))
+mod.4 <- glmer(Single~log.pfu*Bottleneck+(1|Replicate), data=spacer,
+               family=binomial(link = "logit"))
+mod.5 <- glmer(Single~log.pfu*Bottleneck+(Bottleneck|Replicate), data=spacer,
+               family=binomial(link = "logit"))
+plot(mod.1)
+plot(mod.2)
+plot(mod.3)
+plot(mod.4)
+plot(mod.5)
+summary(mod.1)
+summary(mod.2)
+summary(mod.3)
+summary(mod.4)
+summary(mod.5)
+AIC(mod.1, mod.2, mod.3, mod.4, mod.5) %>% compare_AICs()
+confint(mod.5, parm="beta_", method="Wald")
+
+mod.1 <- glmer(Multiple~log.pfu+(1|log.pfu), data=spacer,
+               family=binomial(link = "logit"))
+mod.2 <- glmer(Multiple~log.pfu*Bottleneck+(1|log.pfu), data=spacer,
+               family=binomial(link = "logit"))
+mod.3 <- glmer(Multiple~log.pfu+(1|Replicate), data=spacer,
+               family=binomial(link = "logit"))
+mod.4 <- glmer(Multiple~log.pfu*Bottleneck+(1|Replicate), data=spacer,
+               family=binomial(link = "logit"))
+mod.5 <- glmer(Multiple~log.pfu*Bottleneck+(Bottleneck|Replicate), data=spacer,
+               family=binomial(link = "logit"))
+plot(mod.1)
+plot(mod.2)
+plot(mod.3)
+plot(mod.4)
+plot(mod.5)
+summary(mod.1)
+summary(mod.2)
+summary(mod.3)
+summary(mod.4)
+summary(mod.5)
+AIC(mod.1, mod.2, mod.3, mod.4, mod.5) %>% compare_AICs()
+confint(mod.5, parm="beta_", method="Wald")
+
+mod.1 <- lmer(Total.spacers~log.pfu+(1|log.pfu), data=spacer)
+mod.2 <- lmer(Total.spacers~log.pfu*Bottleneck+(1|log.pfu), data=spacer)
+mod.3 <- lmer(Total.spacers~log.pfu+(1|Replicate), data=spacer)
+mod.4 <- lmer(Total.spacers~log.pfu*Bottleneck+(1|Replicate), data=spacer)
+mod.5 <- lmer(Total.spacers~log.pfu*Bottleneck+(Bottleneck|Replicate), data=spacer)
+
+plot(mod.1)
+plot(mod.2)
+plot(mod.3)
+plot(mod.4)
+plot(mod.5)
+summary(mod.1)
+summary(mod.2)
+summary(mod.3)
+summary(mod.4)
+summary(mod.5)
+AIC(mod.1, mod.2, mod.3, mod.4, mod.5) %>% compare_AICs()
+anova(mod.1, mod.2, mod.3, mod.4, mod.5, test="Chisq")
+confint(mod.5, parm="beta_")
 #### Look at phage titre as function of spacer acquisition ####
+
 spacer_sum <- read.csv("./Plate_bn_exp_2/summary_data/spacer_summary.csv", header=T) 
 spacer_sum$Replicate %<>% as.factor
 spacer_sum$Spacer.Number %<>% relevel(ref="Single")
@@ -139,28 +208,24 @@ spacer_sum$pfu %<>% +1
 spacer_sum$log.pfu <- log10(spacer_sum$pfu)
 spacer_sum %<>% select(-X)
 
-mod.null <- glm(pfu~1, data=spacer_sum,
-                family=gaussian(link="log"))
-mod.1 <- glm(pfu~Spacer.Number, data=spacer_sum,
-                family=gaussian(link="log"))
-
-mod.1 <- glmer(log.pfu~Spacer.Number*Bot, data=spacer_sum,
+mod.1 <- glmer(log.pfu~Spacer.Number*Bottleneck+(1|Replicate), data=spacer_sum,
              family=gaussian(link="identity"))
 
-mod.2 <- glm(log.pfu~Spacer.Number+Bottleneck+Replicate, data=spacer_sum,
-             family=gaussian(link="identity"))
+mod.2 <- glmer(Spacer.Number~log.pfu+Bottleneck+(Bottleneck|Replicate), data=spacer_sum,
+             family=binomial(link="sqrt"))
 par(mfrow=c(2,2))
+plot(mod.1)
 plot(mod.2)
 
 summary(mod.2)
-drop1(mod.2)
+anova(mod.2, test="Chisq")
 
 #### Figures ####
 spacer_plot <- ggplot(aes(y=mean, x=Replicate, group=Spacer.Number), data=spacer_sum)+
-  geom_bar(stat='identity', aes(fill=Spacer.Number), size=0.5, colour="black", position = position_dodge(1))+
+  geom_bar(stat='identity', aes(fill=Spacer.Number), size=0.5, position = position_dodge(1))+
   geom_errorbar(aes(ymin=lower, ymax=upper), width=0.2, size=0.7, position = position_dodge(1))+
   # geom_point(stat="identity", position = position_dodge(.5))+
-  labs(x='Replicate', y="Proportion")+
+  labs(x='Replicate', y="Frequency")+
   # ggtitle('Figure S4: Proportion of CRISPR clones\nwith different numbers of acquired spacers')+
   theme_bw()+
   
@@ -171,8 +236,7 @@ spacer_plot <- ggplot(aes(y=mean, x=Replicate, group=Spacer.Number), data=spacer
   theme(strip.text = element_text(size=12))+
   theme(axis.text = element_text(size=12))+
   
-  #scale_fill_manual(name=c(""),
-  #                  values=c("white", "grey35"))+
+  scale_fill_discrete(name=c("Spacer number"))+
   theme(legend.title = element_text(face="bold", size=12))+
   theme(legend.text = element_text(size = 12))+
   theme(legend.position = "top")+
@@ -207,3 +271,8 @@ combined <- plot_grid(spacer_plot+labs(x=""), phage_plot,
                    ncol = 1, nrow=2, labels = c('A', 'B'),
                    align='hv', axis = 'b', rel_heights = c(1.2, 1))
 combined
+
+ggsave("Spacer_Titre_comp.png", combined, path="../figs/",
+       device="png", dpi=300,
+       width=25, height=18, units=c("cm"))
+ 
