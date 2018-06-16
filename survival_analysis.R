@@ -1,3 +1,6 @@
+#### Survival analysis ####
+## Created 4/6/18 by Jack Common
+
 rm(list=ls(all=TRUE))
 
 library(survival)
