@@ -226,6 +226,115 @@ mono_plot <- ggplot(aes(y=value+1, x=timepoint, group=ID2),
 quartz()
 mono_plot
 
+## 5-clone plot ####
+fiveclone_plot <- ggplot(aes(y=value+1, x=timepoint, group=ID2), 
+                                         data=subset(phageM, bottleneck == '5-clone'))+
+  
+  geom_path(stat='identity', 
+            aes(colour=measurement, linetype=measurement),
+            position=pd)+
+  scale_colour_manual(name='Measurement',
+                      values =c("black", "grey"),
+                      breaks = c("pfu", "cfu"),
+                      labels = c("Phage", "Host"))+
+  scale_linetype_manual(name='Measurement',
+                        values=c(1, 2),
+                        breaks = c("pfu", "cfu"),
+                        labels = c("Phage", "Host"))+
+  geom_point(stat='identity', 
+             aes(shape=measurement, fill=measurement), colour="transparent",
+             position=pd)+
+  scale_fill_manual(name='Measurement',
+                    values =c("black", "grey"),
+                    breaks = c("pfu", "cfu"),
+                    labels = c("Phage", "Host"))+
+  scale_shape_manual(name='Measurement',
+                     values = c(21,24),
+                     breaks = c("pfu", "cfu"),
+                     labels = c("Phage", "Host"))+
+  
+  labs(x='Days post-infection (d.p.i.)', y=expression(bold("P.f.u. ml"*{}^{-1}*"/ C.f.u. ml"*{}^{-1}*"")))+
+  ggtitle('5-clone')+
+  
+  theme_cowplot()+
+  theme(plot.title = element_text(face="bold", hjust=0, size = 16))+
+  theme(axis.title = element_text(face="bold", size=16))+
+  theme(legend.title = element_text(face='bold', size=14))+
+  theme(legend.title.align = 0.5)+
+  theme(legend.position = 'right')+
+  theme(legend.key.width = unit(2, 'cm'))+
+  theme(legend.key.height = unit(0.5, 'cm'))+
+  theme(strip.text = element_text(face='bold', size=14))+
+  
+  scale_x_discrete(breaks=c('t0', 't1', 't2', 't3', 't4', 't5'),
+                   labels=c('0', '1', '2', '3', '4', '5'))+
+  scale_y_continuous(trans = 'log10',
+                     breaks = trans_breaks('log10', function(x) 10^x),
+                     labels = trans_format('log10', math_format(10^.x)))+
+  
+  theme(axis.text = element_text(size=12))+
+  theme(legend.text = element_text(size=12))+
+  
+  geom_hline(yintercept = 1e+2, linetype=2, colour="red")+
+  annotate("text", 1.5, 1e+2, vjust=-1, label="Detection limit", colour="red")
+
+
+fiveclone_plot
+## 50-clone plot ####
+fiftyclone_plot <- ggplot(aes(y=value+1, x=timepoint, group=ID2), 
+                                          data=subset(phageM, bottleneck == '50-clone'))+
+  
+  geom_path(stat='identity', 
+            aes(colour=measurement, linetype=measurement),
+            position=pd)+
+  scale_colour_manual(name='Measurement',
+                      values =c("black", "grey"),
+                      breaks = c("pfu", "cfu"),
+                      labels = c("Phage", "Host"))+
+  scale_linetype_manual(name='Measurement',
+                        values=c(1, 2),
+                        breaks = c("pfu", "cfu"),
+                        labels = c("Phage", "Host"))+
+  geom_point(stat='identity', 
+             aes(shape=measurement, fill=measurement), colour="transparent",
+             position=pd)+
+  scale_fill_manual(name='Measurement',
+                    values =c("black", "grey"),
+                    breaks = c("pfu", "cfu"),
+                    labels = c("Phage", "Host"))+
+  scale_shape_manual(name='Measurement',
+                     values = c(21,24),
+                     breaks = c("pfu", "cfu"),
+                     labels = c("Phage", "Host"))+
+  
+  labs(x='Days post-infection (d.p.i.)', y=expression(bold("P.f.u. ml"*{}^{-1}*"/ C.f.u. ml"*{}^{-1}*"")))+
+  ggtitle('50-clone')+
+  
+  theme_cowplot()+
+  theme(plot.title = element_text(face="bold", hjust=0, size = 16))+
+  theme(axis.title = element_text(face="bold", size=16))+
+  theme(legend.title = element_text(face='bold', size=14))+
+  theme(legend.title.align = 0.5)+
+  theme(legend.position = 'right')+
+  theme(legend.key.width = unit(2, 'cm'))+
+  theme(legend.key.height = unit(0.5, 'cm'))+
+  theme(strip.text = element_text(face='bold', size=14))+
+  
+  scale_x_discrete(breaks=c('t0', 't1', 't2', 't3', 't4', 't5'),
+                   labels=c('0', '1', '2', '3', '4', '5'))+
+  scale_y_continuous(trans = 'log10',
+                     breaks = trans_breaks('log10', function(x) 10^x),
+                     labels = trans_format('log10', math_format(10^.x)))+
+  
+  theme(axis.text = element_text(size=12))+
+  theme(legend.text = element_text(size=12))+
+  
+  geom_hline(yintercept = 1e+2, linetype=2, colour="red")+
+  annotate("text", 1.5, 1e+2, vjust=-1, label="Detection limit", colour="red")
+
+
+fiftyclone_plot
+
 ## Arrange and save raw plots ####
 mono_plot <- mono_plot + theme(plot.margin = unit(c(2,2,0,1), 'pt'))
 fiveclone_plot <- fiveclone_plot + theme(plot.margin = unit(c(2,2,0,1), 'pt'))
