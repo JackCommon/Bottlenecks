@@ -175,7 +175,7 @@ pd = position_dodge(0.1)
 
 
 #### Data ####
-data <- read.csv("Full_bn_2/data/counts/bottleneck_bac_phage.csv", header=T)
+data <- read.csv("Full_bn_2/original_data/population_counts.csv", header=T)
 data <- select(data, -raw, -dilution, -X, -X.1)
 data$ID %<>% as.factor()
 data <- plyr::rename(data, c("ID"="replicate"))
@@ -184,14 +184,13 @@ data$log.pfu <- log(data$pfu+1)
 data$log.cfu <- log(data$cfu+1)
 data %<>% na.exclude
 
-
 #### Model - correlation between cfu and pfu ####
 
 m.null <- lmer(log.pfu~1+(1|replicate), data=data)
 m1 <- lmer(log.pfu~log.cfu+(1|replicate), data=data)
 m2 <- lmer(log.pfu~log.cfu*bottleneck+(1|replicate), data=data)
 m3 <- lmer(log.pfu~log.cfu*timepoint+(1|replicate), data=data)
-m4 <- lmer(log.pfu~log.cfu*bottleneck*timepoint+(1|replicate), data=data)
+m4 <- lm(log.pfu~log.cfu*bottleneck*timepoint+(1|replicate), data=data)
 
 plot(m.null)
 plot(m1)
@@ -205,6 +204,7 @@ anova(m.null, m1, m2, m3, m4, test="F")
 drop1(m4, test="Chisq")
 pf(0.6579, 34, 288, lower.tail = F)
 
+summary(m4)
 model_stats(m4)
 # F-test of the hierarchical model suggests there isn't a correlation between PFU and CFU
 
