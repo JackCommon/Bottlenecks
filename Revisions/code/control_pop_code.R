@@ -1,4 +1,4 @@
-### Dilution Experiment - Phage & Host Population Analysis
+### Controls - Phage & Host Population Analysis
 # Created: 15/6/18 by Jack Common
 
 rm(list=ls())
@@ -122,59 +122,53 @@ timepoint_labeller = function(variable, value) {
 pd <- position_dodge(0.1)
 
 #### Load and format data ####
-data <- read.csv("./Revisions/original_data/dilution_counts.csv", header = T)
-data <- select(data, -raw, -dilution, -MOI)
-data$ID %<>% as.factor()
-data %<>% na.exclude
-#$log.pfu <- log10(phage$pfu+1)
+phageneg <- read.csv("./Revisions/original_data/phage_neg_counts.csv", header = T)
+phageneg <- select(phageneg, -raw, -dilution)
+phageneg$ID %<>% as.factor()
+phageneg$bottleneck %<>% as.factor
+phageneg %<>% na.exclude
+
+CRneg <- read.csv("./Revisions/original_data/crispr_neg_counts.csv", header = T)
+CRneg <- select(CRneg, -raw, -dilution, -MOI)
+CRneg$ID %<>% as.factor()
+CRneg$bottleneck %<>% as.factor
+CRneg %<>% na.exclude
 
 ## Melt data for raw value plots
-dataM <- melt(data, measure.vars = c("pfu", "cfu"))
-dataM <- plyr::rename(dataM, c("variable"="measurement"))
-dataM$treatment %<>% relevel(ref="S")
+newIDS <- c(seq(2.1,2.3,.1), seq(3.1,3.3,.1), seq(4.1,4.3,.1), seq(5.1,5.3,.1),
+            seq(6.1,6.3,.1), seq(7.1,7.3,.1), seq(8.1,8.3,.1), seq(9.1,9.3,.1)) %>% 
+  rep(6)
 
-phageIDs <- c("p1", "p2", "p3",
-              "p4", "p5", "p6") %>% 
-  rep( (length(dataM$ID)/2)/6 )
+phageneg$newID <- newIDS
+CRneg$newID <- newIDS
 
-hostIDs <- c("h1", "h2", "h3",
-             "h4", "h5", "h6") %>% 
-  rep( (length(dataM$ID)/2)/6 )
+CR.M <- melt(CRneg, measure.vars = c("pfu", "cfu"))
+CR.M <- plyr::rename(CR.M, c("variable"="measurement"))
+
+phageIDs <- c("p1", "p2", "p3") %>% 
+  rep( (length(CR.M$ID)/2)/3 )
+
+hostIDs <- c("h1", "h2", "h3") %>% 
+  rep( (length(CR.M$ID)/2)/3 )
 
 ID2 <- c(phageIDs, hostIDs)
 
-dataM$ID2 <- as.factor(ID2)
-
-## Raw figure ####
-raw_plot <- ggplot(aes(y=value+1, x=timepoint, group=ID2), 
-                    data=dataM)+
+CR.M$ID2 <- as.factor(ID2)
+## Phage negative - raw figure ####
+phageneg_plot <- ggplot(aes(y=cfu+1, x=timepoint, group=newID), 
+                   data=phageneg)+
   
   geom_path(stat='identity', 
-            aes(colour=measurement, linetype=measurement),
+            aes(colour=bottleneck),
             position=pd)+
-  scale_colour_manual(name='Measurement',
-                      values =c("black", "grey"),
-                      breaks = c("pfu", "cfu"),
-                      labels = c("Phage", "Host"))+
-  scale_linetype_manual(name='Measurement',
-                        values=c(1, 2),
-                        breaks = c("pfu", "cfu"),
-                        labels = c("Phage", "Host"))+
+
   geom_point(stat='identity', 
-             aes(shape=measurement, fill=measurement), colour="transparent",
+             aes(colour=bottleneck),
              position=pd)+
-  scale_fill_manual(name='Measurement',
-                    values =c("black", "grey"),
-                    breaks = c("pfu", "cfu"),
-                    labels = c("Phage", "Host"))+
-  scale_shape_manual(name='Measurement',
-                     values = c(21,24),
-                     breaks = c("pfu", "cfu"),
-                     labels = c("Phage", "Host"))+
-  
-  labs(x='Days post-infection (d.p.i.)', y=expression(bold("P.f.u. ml"*{}^{-1}*"/ C.f.u. ml"*{}^{-1}*"")))+
+
+  labs(x='Days post-infection (d.p.i.)', y=expression(bold("C.f.u. ml"*{}^{-1}*"")))+
   ggtitle('')+
-  facet_grid(~treatment)+
+  #facet_grid(~treatment)+
   
   theme_cowplot()+
   theme(plot.title = element_text(face="bold", hjust=0, size = 16))+
@@ -193,9 +187,84 @@ raw_plot <- ggplot(aes(y=value+1, x=timepoint, group=ID2),
                      labels = trans_format('log10', math_format(10^.x)))+
   
   theme(axis.text = element_text(size=12))+
-  theme(legend.text = element_text(size=12))+
+  theme(legend.text = element_text(size=12))
   
-  geom_hline(yintercept = 1e+2, linetype=2, colour="red")+
-  annotate("text", 1.5, 1e+2, vjust=-1, label="Phage detection limit", colour="red")
 quartz()
-raw_plot
+phageneg_plot
+
+### CR-ve raw PFU plot ####
+CRneg_phage_plot <- ggplot(aes(y=pfu+1, x=timepoint, group=newID), 
+                        data=CRneg)+
+  
+  geom_path(stat='identity', 
+            aes(colour=bottleneck),
+            position=pd)+
+  
+  geom_point(stat='identity', 
+             aes(colour=bottleneck),
+             position=pd)+
+  
+  labs(x='Days post-infection (d.p.i.)', y=expression(bold("P.f.u. ml"*{}^{-1}*"")))+
+  ggtitle('')+
+  #facet_grid(~treatment)+
+  
+  theme_cowplot()+
+  theme(plot.title = element_text(face="bold", hjust=0, size = 16))+
+  theme(axis.title = element_text(face="bold", size=16))+
+  theme(legend.title = element_text(face='bold', size=14))+
+  theme(legend.title.align = 0.5)+
+  theme(legend.position = 'right')+
+  theme(legend.key.width = unit(2, 'cm'))+
+  theme(legend.key.height = unit(0.5, 'cm'))+
+  theme(strip.text = element_text(face='bold', size=14))+
+  
+  scale_x_discrete(breaks=c('t0', 't1', 't2', 't3', 't4', 't5'),
+                   labels=c('0', '1', '2', '3', '4', '5'))+
+  scale_y_continuous(trans = 'log10',
+                     breaks = trans_breaks('log10', function(x) 10^x),
+                     labels = trans_format('log10', math_format(10^.x)))+
+  
+  theme(axis.text = element_text(size=12))+
+  theme(legend.text = element_text(size=12))
+
+quartz()
+CRneg_phage_plot
+
+#### CR-ve CFU raw plot
+CRneg_host_plot <- ggplot(aes(y=cfu+1, x=timepoint, group=newID), 
+                           data=CRneg)+
+  
+  geom_path(stat='identity', 
+            aes(colour=bottleneck),
+            position=pd)+
+  
+  geom_point(stat='identity', 
+             aes(colour=bottleneck),
+             position=pd)+
+  
+  labs(x='Days post-infection (d.p.i.)', y=expression(bold("C.f.u. ml"*{}^{-1}*"")))+
+  ggtitle('')+
+  #facet_grid(~treatment)+
+  
+  theme_cowplot()+
+  theme(plot.title = element_text(face="bold", hjust=0, size = 16))+
+  theme(axis.title = element_text(face="bold", size=16))+
+  theme(legend.title = element_text(face='bold', size=14))+
+  theme(legend.title.align = 0.5)+
+  theme(legend.position = 'right')+
+  theme(legend.key.width = unit(2, 'cm'))+
+  theme(legend.key.height = unit(0.5, 'cm'))+
+  theme(strip.text = element_text(face='bold', size=14))+
+  
+  scale_x_discrete(breaks=c('t0', 't1', 't2', 't3', 't4', 't5'),
+                   labels=c('0', '1', '2', '3', '4', '5'))+
+  scale_y_continuous(trans = 'log10',
+                     breaks = trans_breaks('log10', function(x) 10^x),
+                     labels = trans_format('log10', math_format(10^.x)))+
+  
+  theme(axis.text = element_text(size=12))+
+  theme(legend.text = element_text(size=12))
+
+quartz()
+CRneg_host_plot
+
