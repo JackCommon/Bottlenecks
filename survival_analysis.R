@@ -11,10 +11,8 @@ library(relaimpo)
 library(dplyr)
 library(magrittr)
 
-setwd("~/Documents/OneDrive - University of Exeter/Data/Bottlenecks/")
-
 # Experiment 1
-phage<-read.csv("./Full_bn_2/data/counts/exp1.phage.surv.csv", header=T)
+phage<-read.csv("./Full_bn_2/original_data/survival.csv", header=T)
 phage$bottleneck %<>% as.factor()
 attach(phage)
 names(phage)

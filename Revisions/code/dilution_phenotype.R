@@ -1,11 +1,12 @@
 #### Dilution experiment: phenotype analysis
-# Created: 22/04/18 Jack Common
+# Created: 24/06/18 Jack Common
 
 rm(list=ls())
 
 library(ggplot2)
 library(scales)
 library(reshape2)
+library(plyr)
 library(dplyr)
 library(tidyr)
 library(magrittr)
@@ -22,29 +23,54 @@ compare_AICs = function(df){          # df is a dataframe of AIC values
 }
 
 ### Convert log-odds to probabilities from binomial GLM output
+logit2prob <- function(logit){
+  odds <- exp(logit)
+  prob <- odds / (1 + odds)
+  return(prob)
+}
 
-# Data
-pheno <- read.csv('./Plate_bn_exp_2/original_data/phenotype_1.csv', header=T)
+CopyCIs <- function(model){
+  conf = logit2prob(confint(model, level=c(0.95)))
+  print(c(conf[1,1]))
+  print(c(conf[1,2]))
+  CIs <- data.frame(conf[1,1], conf[1,2])
+  
+  #clipboard(CIs)
+  clip = pipe('pbcopy', 'w')
+  write.table(CIs, file=clip, sep='\t', row.names = F, col.names = F)
+  close(clip)
+  print('Probability 95% CIs copied to the clipboard')
+  
+}
+
+# Data ####
+pheno <- read.csv('./Revisions/original_data/dilution_phenotype.csv', header=T)
 pheno <- melt(pheno, measure.vars = c('CRISPR', 'SM', 'Sensitive'))
 pheno$Replicate %<>% as.factor()
+pheno$Clone %<>% as.factor
+pheno %<>% plyr::rename(c("variable"="phenotype"))
 
-# Binomial model
-mod.null <- glm(value~1, data=pheno, family=binomial)
-mod.1 <- glm(value~bottleneck, data=pheno, family=binomial)
-mod.2 <- glm(value~variable, data=pheno, family=binomial)
-mod.g <- glm(value~bottleneck*variable, data=pheno, family=binomial)
+# Binomial GLMs ####
+m.null <- glm(value~1, data=pheno, family=binomial)
+m1 <- glm(value~treatment, data=pheno, family=binomial)
+m2 <- glm(value~phenotype, data=pheno, family=binomial)
+m.global <- glm(value~treatment*phenotype, data=pheno, family=binomial)
 
-# Compare using delta-AIC to get K-L values
-AIC(mod.null, mod.1, mod.2, mod.g) %>% compare_AICs()
+par(mfrow=c(2,2))
+plot(m.null)
+plot(m1)
+plot(m2)
+plot(m.global)
 
-# And finally a likelihood test
-anova(mod.g, test="Chisq")
+# Compare using AIC and ANOVA
+AIC(m.null, m1, m2, m.global) %>% compare_AICs()
+anova(m.null, m1, m2, m.global, test="Chisq")
 
-summary(mod.g)
+summary(m.global)
 confint(mod.g)
 
 # Get the actual probabilities from the model
-model.tables(aov(mod.g), "mean")
+model.tables(aov(m.global), "mean")
 
 # Confidence intervals
 pheno$variable %<>% relevel(ref="SM")
