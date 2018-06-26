@@ -246,7 +246,7 @@ summary(m.global)
 model_stats(m4)
 # F-test of the hierarchical model suggests there isn't a correlation between PFU and CFU
 
-#### Model - cfu covarying with botleneck and timepoint ####
+#### Model - cfu covarying with bottleneck and timepoint ####
 m1 <- lm(log.cfu~1, data=data)
 m2 <- lm(log.cfu~timepoint, data=data)
 m3 <- lm(log.cfu~bottleneck, data=data)
