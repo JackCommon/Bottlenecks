@@ -9,34 +9,43 @@ library(scales)
 library(reshape2)
 library(plyr)
 library(dplyr)
+library(broom)
 library(tidyr)
 library(magrittr)
 library(cowplot)
 library(lme4)
 
 #### Stats functions ####
-# Extracts the intercept coefficient (mean) and 95% CIs from the GLM objects, with added functionality to copy those to the clipboard for easier input to summary dataframes
+stats <- data.frame(coef=rep(0,16), lower=rep(0,16), upper=rep(0,16))
 
-# Enable this if using Ubuntu
-#clipboard <- function(x, sep="\t", row.names=FALSE, col.names=FALSE){
-#    con <- pipe("xclip -selection clipboard -i", open="w")
-#    write.table(x, con, sep=sep, row.names=row.names, col.names=col.names)
-#    close(con)
-#}
+make_coef_table <- function(model, e=NULL, treat){
+  temp <- model_stats(model, e)
+  stats$coef[treat-1] <- temp[1,1]
+  stats$lower[treat-1] <- temp[1,2]
+  stats$upper[treat-1] <- temp[1,3]
+  return(stats)
+}
 
-model_stats = function(model){
-  sum = coef(model)
-  conf = confint(model, level=c(0.95))
-  print(c(sum[1]))
-  print(c(conf[1,1]))
-  print(c(conf[1,2]))
+model_stats <- function(model, e=NULL){
+  sum <- fixef(model)
+  conf <- confint(model, level=c(0.95), parm="beta_")
   
-  stats = data.frame(conf[1,1], conf[1,2])
-  #clipboard(stats)
-  clip = pipe('pbcopy', 'w')
+  stats <- data.frame(sum[1], conf[1,1], conf[1,2])
+  if(e==TRUE){
+    cat(c(exp(sum[1])), "\n")
+    cat(c(exp(conf[1,1])), "\n")
+    cat(c(exp(conf[1,2])), "\n")
+    stats <- exp(stats)
+  } else {
+    cat(c(sum[1]), "\n")
+    cat(c(conf[1,1]), "\n")
+    cat(c(conf[1,2]), "\n")
+  }
+  clip <- pipe('pbcopy', 'w')
   write.table(stats, file=clip, sep='\t', row.names = F, col.names = F)
   close(clip)
-  print('Coefficients copied to the clipboard')
+  cat('Coefficients copied to the clipboard')
+  return(stats)
   
 }
 
@@ -175,14 +184,14 @@ pd = position_dodge(0.1)
 
 
 #### Data ####
-data <- read.csv("Phage_bn_exp/data/counts/counts_master_csv.csv", header=T)
+data <- read.csv("Phage_bn_exp/original_data/population_counts.csv", header=T)
 data <- select(data, -raw, -dilution)
 data$ID %<>% as.factor()
 data <- plyr::rename(data, c("ID"="replicate"))
-data$bottleneck %<>% as.factor
+#data$bottleneck %<>% as.factor
 data$log.pfu <- log(data$pfu+1)
 data$log.cfu <- log(data$cfu+1)
-data %<>% na.exclude
+#data %<>% na.exclude
 
 #### Model - correlation between cfu and pfu ####
 
@@ -190,20 +199,21 @@ m.null <- lmer(log.pfu~1+(1|replicate), data=data)
 m1 <- lmer(log.pfu~log.cfu+(1|replicate), data=data)
 m2 <- lmer(log.pfu~log.cfu*bottleneck+(1|replicate), data=data)
 m3 <- lmer(log.pfu~log.cfu*timepoint+(1|replicate), data=data)
-m4 <- lmer(log.pfu~log.cfu*bottleneck*timepoint+(1|replicate), data=data)
+m.global <- lmer(log.pfu~log.cfu*bottleneck*timepoint+(1|replicate), data=data)
 
 plot(m.null)
 plot(m1)
 plot(m2)
 plot(m3)
-plot(m4)
+plot(m.global)
 
-AIC(m.null, m1, m2, m3, m4) %>% compare_AICs()
+AIC(m.null, m1, m2, m3, m.global) %>% compare_AICs()
 
-anova(m.null, m1, m2, m3, m4, test="F")
-drop1(m4, test="Chisq")
+anova(m.null, m1, m2, m3, m.global, test="F")
+drop1(m.global, test="Chisq")
+summary(m.global)
 
-model_stats(m4)
+model_stats(m.global)
 # F-test of the hierarchical model suggests there is a correlation between PFU and CFU
 
 #### Model - cfu covarying with botleneck and timepoint ####
@@ -245,23 +255,22 @@ model_stats <- function(model){
   cat('Exponentiated fixed effect coefficients & 95% confidence intervals of bottlenecks 2-9 at specified timepoint copied to the clipboard\n')
 }
 
-m1 <- lmer(log.cfu~1+(1|replicate), data=data)
-m2 <- lmer(log.cfu~timepoint+(1|replicate), data=data)
-m3 <- lmer(log.cfu~bottleneck+(1|replicate), data=data)
-m4 <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
+m.null <- lmer(log.cfu~1+(1|replicate), data=data)
+m1 <- lmer(log.cfu~timepoint+(1|replicate), data=data)
+m2 <- lmer(log.cfu~bottleneck+(1|replicate), data=data)
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
 
+plot(m.null)
 plot(m1)
 plot(m2)
-plot(m3)
-plot(m4)
+plot(m.global)
 
-AIC(m1, m2, m3, m4) %>% compare_AICs()
+AIC(m.null, m1, m2, m.global) %>% compare_AICs()
 
-anova(m1, m2, m3, m4, test="Chisq")
-drop1(m4, test="Chisq")
-summary(m4)
-
-model_stats(m4)
+anova(m.null, m1, m2, m.global, test="Chisq")
+drop1(m.global, test="Chisq")
+summary(m.global)
+tidy(m.global) %>% head(16)
 
 data$timepoint %<>% relevel(ref="t5")
 data$timepoint %<>% relevel(ref="t4")
@@ -270,8 +279,76 @@ data$timepoint %<>% relevel(ref="t2")
 data$timepoint %<>% relevel(ref="t1")
 data$timepoint %<>% relevel(ref="t0")
 
-m4 <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
-model_stats(m4)
+# Copy coefficients ####
+
+data$bottleneck %<>% relevel(ref="2")
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
+stats <- make_coef_table(m.global, e=T, treat=2)
+
+data$bottleneck %<>% relevel(ref="3")
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
+stats <- make_coef_table(m.global, e=T, treat=3)
+
+data$bottleneck %<>% relevel(ref="4")
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
+stats <- make_coef_table(m.global, e=T, treat=4)
+
+data$bottleneck %<>% relevel(ref="5")
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
+stats <- make_coef_table(m.global, e=T, treat=5)
+
+data$bottleneck %<>% relevel(ref="6")
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
+stats <- make_coef_table(m.global, e=T, treat=6)
+
+data$bottleneck %<>% relevel(ref="7")
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
+stats <- make_coef_table(m.global, e=T, treat=7)
+
+data$bottleneck %<>% relevel(ref="8")
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
+stats <- make_coef_table(m.global, e=T, treat=8)
+
+data$bottleneck %<>% relevel(ref="9")
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
+stats <- make_coef_table(m.global, e=T, treat=9)
+
+data$bottleneck %<>% relevel(ref="p2")
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
+stats <- make_coef_table(m.global, e=T, treat=10)
+
+data$bottleneck %<>% relevel(ref="p3")
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
+stats <- make_coef_table(m.global, e=T, treat=11)
+
+data$bottleneck %<>% relevel(ref="p4")
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
+stats <- make_coef_table(m.global, e=T, treat=12)
+
+data$bottleneck %<>% relevel(ref="p5")
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
+stats <- make_coef_table(m.global, e=T, treat=13)
+
+data$bottleneck %<>% relevel(ref="p6")
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
+stats <- make_coef_table(m.global, e=T, treat=14)
+
+data$bottleneck %<>% relevel(ref="p7")
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
+stats <- make_coef_table(m.global, e=T, treat=15)
+
+data$bottleneck %<>% relevel(ref="p8")
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
+stats <- make_coef_table(m.global, e=T, treat=16)
+
+data$bottleneck %<>% relevel(ref="p9")
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
+stats <- make_coef_table(m.global, e=T, treat=17)
+
+clip <- pipe('pbcopy', 'w')
+write.table(stats, file=clip, sep='\t', row.names = F, col.names = F)
+close(clip)
+cat('Coefficients copied to the clipboard')
 
 
 #### Raw fig - just cfu ####
