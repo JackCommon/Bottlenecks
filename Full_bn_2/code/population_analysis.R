@@ -201,81 +201,54 @@ data$log.pfu <- log(data$pfu+1)
 data$log.cfu <- log(data$cfu+1)
 #data %<>% na.exclude
 
+
 #### Model - correlation between cfu and pfu ####
 
 m.null <- lmer(log.pfu~1+(1|replicate), data=data)
 m1 <- lmer(log.pfu~log.cfu+(1|replicate), data=data)
-m2 <- lmer(log.pfu~log.cfu*treatment+(1|replicate), data=data)
-m3 <- lmer(log.pfu~log.cfu*bottleneck+(1|replicate), data=data)
-m4 <- lmer(log.pfu~log.cfu*timepoint+(1|replicate), data=data)
-m5 <- lmer(log.pfu~log.cfu*bottleneck*treatment+(1|replicate), data=data)
-m6 <- lmer(log.pfu~log.cfu*timepoint*treatment+(1|replicate), data=data)
-m7 <- lmer(log.pfu~log.cfu*bottleneck*timepoint+(1|replicate), data=data)
-m.global <- lmer(log.pfu~log.cfu*bottleneck*timepoint*treatment+(1|replicate), data=data)
+m2 <- lmer(log.pfu~log.cfu*bottleneck+(1|replicate), data=data)
+m3 <- lmer(log.pfu~log.cfu*timepoint+(1|replicate), data=data)
+m.global <- lmer(log.pfu~log.cfu*bottleneck*timepoint+(1|replicate), data=data)
 
-m.null <- lm(log.pfu~1, data=data)
-m1 <- lm(log.pfu~log.cfu, data=data)
-m2 <- lm(log.pfu~log.cfu*treatment, data=data)
-m3 <- lm(log.pfu~log.cfu*bottleneck, data=data)
-m4 <- lm(log.pfu~log.cfu*timepoint, data=data)
-m5 <- lm(log.pfu~log.cfu*bottleneck*treatment, data=data)
-m6 <- lm(log.pfu~log.cfu*timepoint*treatment, data=data)
-m7 <- lm(log.pfu~log.cfu*bottleneck*timepoint, data=data)
-m.global <- lm(log.pfu~log.cfu*bottleneck*timepoint*treatment, data=data)
-
-par(mfrow=c(2,2))
 plot(m.null)
 plot(m1)
 plot(m2)
 plot(m3)
-plot(m4)
-plot(m5)
-plot(m6)
-plot(m7)
 plot(m.global)
 
-AIC(m.null, m1, m2, m3, m4,
-    m5, m6, m7, m.global) %>% compare_AICs()
+AIC(m.null, m1, m2, m3, m.global) %>% compare_AICs()
 
-anova(m.null, m1, m2, m3, m4,
-      m5, m6, m7, m.global, test="F")
+anova(m.null, m1, m2, m3, m.global, test="F")
 drop1(m.global, test="Chisq")
-pf(0.6579, 34, 288, lower.tail = F)
 
 summary(m.global)
 model_stats(m4)
 # F-test of the hierarchical model suggests there isn't a correlation between PFU and CFU
 
 #### Model - cfu covarying with bottleneck and timepoint ####
-m1 <- lm(log.cfu~1, data=data)
-m2 <- lm(log.cfu~timepoint, data=data)
-m3 <- lm(log.cfu~bottleneck, data=data)
-m4 <- lm(log.cfu~treatment, data=data)
-m5 <- lm(log.cfu~bottleneck*timepoint, data=data)
-m6 <- lm(log.cfu~bottleneck*treatment, data=data)
-m7 <- lm(log.cfu~timepoint*treatment, data=data)
-m.global <- lm(log.cfu~bottleneck*timepoint*treatment, data=data)
+m.null <- lmer(log.cfu~1+(1|replicate), data=data)
+m1 <- lmer(log.cfu~timepoint+(1|replicate), data=data)
+m2 <- lmer(log.cfu~bottleneck+(1|replicate), data=data)
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data)
 
-par(mfrow=c(2,2))
+#par(mfrow=c(2,2))
+plot(m.null)
 plot(m1)
 plot(m2)
-plot(m3)
-plot(m4)
-plot(m5)
-plot(m6)
-plot(m7)
 plot(m.global)
 
-AIC(m1, m2, m3, m4,
-    m5, m6, m7, m.global) %>% compare_AICs()
+AIC(m.null, m1, m2, m.global) %>% compare_AICs()
 
-anova(m1, m2, m3, m4,
-      m5, m6, m7, m.global, test="Chisq")
+anova(m.null, m1, m2, m.global, test="Chisq")
 drop1(m.global, test="Chisq")
-drop1(m4, test="Chisq")
-drop1(m5, test="Chisq")
-summary(m.global)
+sresid <- resid(m.global, type = "pearson")  # Extract the standardised residuals
+hist(sresid)
+r.squaredGLMM(m.global) # all of the conditional R2 is explained by the marginal R2, so the random term is irrelevant. Hence,
+                        # a linear model should be adequate
+m.global <- lm(log.cfu~bottleneck*timepoint, data=data)
 
+summary(m.global)
+plot(m.global)
 model_stats_linear(m.global)
 
 data$treatment %<>% relevel(ref="phageN")
@@ -327,6 +300,105 @@ clip <- pipe('pbcopy', 'w')
 write.table(stats, file=clip, sep='\t', row.names = F, col.names = F)
 close(clip)
 cat('Coefficients copied to the clipboard')
+
+
+#### Model - CFU*PFU for control data ####
+data_cont <- filter(data, bottleneck%in%c("c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9"))
+
+m.null <- lmer(log.pfu~1+(1|replicate), data=data_cont)
+m1 <- lmer(log.pfu~log.cfu+(1|replicate), data=data_cont)
+m2 <- lmer(log.pfu~log.cfu*bottleneck+(1|replicate), data=data_cont)
+m3 <- lmer(log.pfu~log.cfu*timepoint+(1|replicate), data=data_cont)
+m.global <- lmer(log.pfu~log.cfu*bottleneck*timepoint+(1|replicate), data=data_cont)
+
+plot(m.null)
+plot(m1)
+plot(m2)
+plot(m3)
+plot(m.global)
+
+AIC(m.null, m1, m2, m3, m.global) %>% compare_AICs()
+
+anova(m.null, m1, m2, m3, m.global, test="F")
+drop1(m.global, test="Chisq")
+
+# PFU covaries with CFU in the control data, but not in the experimental data
+
+#### Model - CFU*PFU for experiment data ####
+data_exp <-  filter(data, bottleneck%in%c(seq(2,9,1)))
+
+m.null <- lmer(log.pfu~1+(1|replicate), data=data_exp)
+m1 <- lmer(log.pfu~log.cfu+(1|replicate), data=data_exp)
+m2 <- lmer(log.pfu~log.cfu*bottleneck+(1|replicate), data=data_exp)
+m3 <- lmer(log.pfu~log.cfu*timepoint+(1|replicate), data=data_exp)
+m.global <- lmer(log.pfu~log.cfu*bottleneck*timepoint+(1|replicate), data=data_exp)
+
+plot(m.null)
+plot(m1)
+plot(m2)
+plot(m3)
+plot(m.global)
+
+AIC(m.null, m1, m2, m3, m.global) %>% compare_AICs()
+
+sresid <- resid(m.global, type = "pearson")  # Extract the standardised residuals
+hist(sresid)
+
+par(mfrow=c(1,2))
+plot(sresid ~ data_exp$bottleneck*data_exp$timepoint) 
+
+anova(m.null, m1, m2, m3, m.global, test="F")
+drop1(m.global, test="Chisq")
+summary(m.global)
+r.squaredGLMM(m.global)
+
+#### Model - cfu covarying with bottleneck and timepoint EXPERIMENT DATA ####
+m.null <- lmer(log.cfu~1+(1|replicate), data=data_exp)
+m1 <- lmer(log.cfu~timepoint+(1|replicate), data=data_exp)
+m2 <- lmer(log.cfu~bottleneck+(1|replicate), data=data_exp)
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data_exp)
+
+#par(mfrow=c(2,2))
+plot(m.null)
+plot(m1)
+plot(m2)
+plot(m.global)
+
+AIC(m.null, m1, m2, m.global) %>% compare_AICs()
+
+anova(m.null, m1, m2, m.global, test="Chisq")
+drop1(m.global, test="Chisq")
+sresid <- resid(m.global, type = "pearson")  # Extract the standardised residuals
+hist(sresid)
+r.squaredGLMM(m.global) # all of the conditional R2 (random) is explained by the marginal R2 (fixed), so the random term is irrelevant. Hence,
+                        # a linear model should be adequate
+
+m.global <- lm(log.cfu~bottleneck*timepoint, data=data_exp)
+summary(m.global)
+
+#### Model - cfu covarying with bottleneck and timepoint CRISPR -VE DATA ####
+m.null <- lmer(log.cfu~1+(1|replicate), data=data_cont)
+m1 <- lmer(log.cfu~timepoint+(1|replicate), data=data_cont)
+m2 <- lmer(log.cfu~bottleneck+(1|replicate), data=data_cont)
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|replicate), data=data_cont)
+
+#par(mfrow=c(2,2))
+plot(m.null)
+plot(m1)
+plot(m2)
+plot(m.global)
+
+AIC(m.null, m1, m2, m.global) %>% compare_AICs()
+
+anova(m.null, m1, m2, m.global, test="Chisq")
+drop1(m.global, test="Chisq")
+sresid <- resid(m.global, type = "pearson")  # Extract the standardised residuals
+hist(sresid)
+r.squaredGLMM(m.global) # all of the conditional R2 (random) is explained by the marginal R2 (fixed), so the random term is irrelevant. Hence,
+# a linear model should be adequate
+
+m.global <- lm(log.cfu~bottleneck*timepoint, data=data_exp)
+summary(m.global)
 
 #### Model - pfu covarying with bottleneck & timepoint ####
 m1 <- lm(log.pfu~1, data=data)
@@ -404,6 +476,7 @@ clip <- pipe('pbcopy', 'w')
 write.table(stats, file=clip, sep='\t', row.names = F, col.names = F)
 close(clip)
 cat('Coefficients copied to the clipboard')
+
 
 
 #### Raw fig - just cfu ####

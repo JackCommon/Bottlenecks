@@ -14,6 +14,7 @@ library(tidyr)
 library(magrittr)
 library(cowplot)
 library(lme4)
+library(MuMIn)
 
 #### Stats functions ####
 stats <- data.frame(coef=rep(0,16), lower=rep(0,16), upper=rep(0,16))
