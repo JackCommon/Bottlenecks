@@ -212,7 +212,11 @@ AIC(m.null, m1, m2, m3, m.global) %>% compare_AICs()
 
 anova(m.null, m1, m2, m3, m.global, test="F")
 drop1(m.global, test="Chisq")
-summary(m.global)
+sresid <- resid(m.global, type="pearson")
+hist(sresid)
+
+summary(lm.global)
+
 
 model_stats(m.global)
 # F-test of the hierarchical model suggests there is a correlation between PFU and CFU

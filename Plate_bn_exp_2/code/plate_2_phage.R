@@ -416,35 +416,35 @@ close(clip)
 plot(survfit(model3), lty=c(1,2,3))
 
 
-#### GLMMs ####
+#### Model - PFU only ####
 phage$log.pfu <- log(phage$pfu+1)
 
 m.null <- lmer(log.pfu~1+(1|ID), data=phage)
 m1 <- lmer(log.pfu~timepoint+(1|ID), data=phage)
 m2 <- lmer(log.pfu~bottleneck+(1|ID), data=phage)
-m3 <- lmer(log.pfu~bottleneck*timepoint+(1|ID), data=phage)
-m4 <- lmer(log.pfu~bottleneck*timepoint+(1|timepoint), data=phage)
-m5 <- lmer(log.pfu~bottleneck*timepoint+(1|bottleneck), data=phage)
-m6 <- lmer(log.pfu~bottleneck*timepoint+(ID|timepoint), data=phage)
-m7 <- lmer(log.pfu~bottleneck*timepoint+(ID|bottleneck), data=phage)
-m8 <- lmer(log.pfu~bottleneck*timepoint+(timepoint|bottleneck), data=phage)
-m.global <- lmer(log.pfu~bottleneck*timepoint+(timepoint|bottleneck)+(1|ID), data=phage)
+m.global <- lmer(log.pfu~bottleneck*timepoint+(1|ID), data=phage)
+#m4 <- lmer(log.pfu~bottleneck*timepoint+(1|timepoint), data=phage)
+#m5 <- lmer(log.pfu~bottleneck*timepoint+(1|bottleneck), data=phage)
+#m6 <- lmer(log.pfu~bottleneck*timepoint+(ID|timepoint), data=phage)
+#m7 <- lmer(log.pfu~bottleneck*timepoint+(ID|bottleneck), data=phage)
+#m8 <- lmer(log.pfu~bottleneck*timepoint+(timepoint|bottleneck), data=phage)
+#m.global <- lmer(log.pfu~bottleneck*timepoint+(timepoint|bottleneck)+(1|ID), data=phage)
 
 plot(m.null)
 plot(m1)
 plot(m2)
-plot(m3)
-plot(m4)
-plot(m5)
-plot(m6)
-plot(m7)
-plot(m8)
+#plot(m3)
+#plot(m4)
+#plot(m5)
+#plot(m6)
+#plot(m7)
+#plot(m8)
 plot(m.global)
-AIC(m.null, m1, m2, m3, m4, m5, m6, m7, m8, m.global) %>% compare_AICs()
+AIC(m.null, m1, m2, m.global) %>% compare_AICs()
 # Model 3 (bottleneck*timepoint as fixed with replicate as random) reduces AIC the most
-m.global <- lmer(log.pfu~bottleneck*timepoint+(1|ID), data=phage)
+#m.global <- lmer(log.pfu~bottleneck*timepoint+(1|ID), data=phage)
 summary(m.global)
-anova(m.null, m1, m2, m.global, test="Chisq")
+#anova(m.null, m1, m2, m.global, test="Chisq")
 drop1(m.global, test="Chisq")
 sresid <- resid(m.global, type = "pearson")  # Extract the standardised residuals
 hist(sresid)
@@ -453,3 +453,57 @@ R2[1]/R2[2]*100
 
 m.global <- lm(log.pfu~bottleneck*timepoint, data=phage)
 tidy(m.global)
+
+#### Model - PFU*CFU ####
+phage$log.cfu <- log(phage$cfu+1)
+
+m.null <- lmer(log.pfu~1+(1|ID), data=phage)
+m1 <- lmer(log.pfu~log.cfu+(1|ID), data=phage)
+m2 <- lmer(log.pfu~log.cfu*bottleneck+(1|ID), data=phage)
+m3 <- lmer(log.pfu~log.cfu*timepoint+(1|ID), data=phage)
+m.global <- lmer(log.pfu~log.cfu*bottleneck*timepoint+(1|ID), data=phage)
+
+plot(m.null)
+plot(m1)
+plot(m2)
+plot(m3)
+plot(m.global)
+
+AIC(m.null, m1, m2, m3, m.global) %>% compare_AICs()
+
+anova(m.null, m1, m2, m3, m.global, test="F")
+drop1(m.global, test="Chisq")
+
+sresid <- resid(m.global, type="pearson")
+hist(sresid)
+
+summary(m.global)
+R2 <- r.squaredGLMM(m.global)
+R2[1]/R2[2]*100
+
+### Model - CFU only ####
+
+m.null <- lmer(log.cfu~1+(1|ID), data=phage)
+m1 <- lmer(log.cfu~bottleneck+(1|ID), data=phage)
+m2 <- lmer(log.cfu~timepoint+(1|ID), data=phage)
+m.global <- lmer(log.cfu~bottleneck*timepoint+(1|ID), data=phage)
+
+plot(m.null)
+plot(m1)
+plot(m2)
+plot(m.global)
+
+AIC(m.null, m1, m2, m.global) %>% compare_AICs()
+
+anova(m.null, m1, m2, m.global, test="F")
+drop1(m.global, test="Chisq")
+
+sresid <- resid(m.global, type="pearson")
+hist(sresid)
+
+summary(m.global)
+R2 <- r.squaredGLMM(m.global)
+R2[1]/R2[2]*100
+
+m.global <- lm(log.cfu~bottleneck*timepoint, data=phage)
+summary(m.global)
