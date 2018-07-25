@@ -63,17 +63,22 @@ confint(m.g)
 model.tables(aov(m.g), "mean")
 
 # Confidence intervals
-pheno$variable %<>% relevel(ref="SM")
-pheno$variable %<>% relevel(ref="Sensitive")
-pheno$variable %<>% relevel(ref="CRISPR")
+pheno$phenotype %<>% relevel(ref="SM")
+pheno$phenotype %<>% relevel(ref="Sensitive")
+pheno$phenotype %<>% relevel(ref="CRISPR")
 
-pheno$bottleneck %<>% relevel(ref="50-clone")
-pheno$bottleneck %<>% relevel(ref="5-clone")
-pheno$bottleneck %<>% relevel(ref="1-clone")
+pheno$bottleneck %<>% relevel(ref="9")
+pheno$bottleneck %<>% relevel(ref="8")
+pheno$bottleneck %<>% relevel(ref="7")
+pheno$bottleneck %<>% relevel(ref="6")
+pheno$bottleneck %<>% relevel(ref="5")
+pheno$bottleneck %<>% relevel(ref="4")
+pheno$bottleneck %<>% relevel(ref="3")
+pheno$bottleneck %<>% relevel(ref="2")
 
 m.g <- glm(value~bottleneck*phenotype, data=pheno, family=binomial)
 
-logit2prob(confint(mod.g))
+logit2prob(confint(m.g))
 
 ### Summary figures
 OG_genotypes = c('prop.CRISPR', 'prop.SM', 'prop.Sensitive')
@@ -89,8 +94,8 @@ genotype_labeller = function(variable, value) {
   return(genotype_names_facet[value])
 }
 
-pheno_sum <- read.csv('./Plate_bn_exp_2/summary_data/phenotype_summary.csv')
-pheno_sum %<>% na.exclude()
+pheno_sum <- read.csv('./Revisions/summary_data/CRneg_pheno_summary.csv')
+pheno_sum$bottleneck %<>% as.factor()
 pheno_sum$variable %<>% relevel(., ref='Sensitive')
 pheno_sum$variable %<>% relevel(., ref='SM')
 pheno_sum$variable %<>% relevel(., ref='CRISPR')
@@ -111,11 +116,14 @@ pheno_sum_fig <- ggplot(aes(y=mean, x=bottleneck, group=variable), data=pheno_su
   theme(legend.key.height = unit(0.8, 'cm'))+
   theme(legend.text = element_text(size=11))+
   
-  scale_x_discrete(breaks=plate_OG_bottleneck, labels=plate_bottleneck_names_legend)+
+  scale_x_discrete(breaks=sol_OG_bottleneck, labels=sol_bottleneck_names_legend)+
   theme(axis.text = element_text(size=12))+
   
   scale_fill_manual(name='Genotype',
                     breaks = c('CRISPR', "Sensitive", "SM"),
                     labels = c("CRISPR", "Sensitive", "SM"),
-                    values = c("#F8766D", "#619CFF", "#00BA38"))
+                    values = c("#F8766D", "#619CFF", "#00BA38"))+
+  NULL
 pheno_sum_fig
+
+layer_scales(pheno_sum_fig)$x$range$range

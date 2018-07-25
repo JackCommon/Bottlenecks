@@ -3,6 +3,7 @@
 
 rm(list=ls(all=TRUE))
 
+#### Dependencies ####
 library(survival)
 library(rms)
 library(car)
@@ -11,9 +12,23 @@ library(relaimpo)
 library(dplyr)
 library(magrittr)
 
-# Experiment 1
+#### Functions ####
+## Compare AIC values for model fit
+# This function extracts the AIC for each GLM, and then compares the absolute relative differences for each AIC to the model with the lowest AIC. This acts as a measure of model fit. More can be found at: http://faculty.washington.edu/skalski/classes/QERM597/papers_xtra/Burnham%20and%20Anderson.pdf
+
+compare_AICs = function(df){          # df is a dataframe of AIC values 
+  print(df)                           # prints the origina AIC values 
+  col_len = length(df[,2])            # extracts the number of number of models
+  AIC_min = abs(min(df[,2]))          # finds the minimum AIC value
+  for (i in seq(1, col_len, 1)){      # loop through the AIC values and prints the absolute differences from AIC_min
+    print( (abs(df[i,2])) - AIC_min)
+  }
+}
+
+# Experiment 1 ####
 phage<-read.csv("./Full_bn_2/original_data/survival.csv", header=T)
 phage$bottleneck %<>% as.factor()
+phage$replicate %<>% as.factor
 attach(phage)
 names(phage)
 
@@ -21,16 +36,23 @@ summary(KM<-survfit(Surv(time_to_death,status)~1))
 plot(KM, ylab="Survivorship", xlab="Transfer")
 
 # Cox proportional hazards model
-model3<-coxph(Surv(time_to_death,status)~bottleneck)
-summary(model3)
-model3$loglik
+m.null <- coxph(Surv(time_to_death, status)~1)
+m1 <- coxph(Surv(time_to_death, status)~bottleneck)
+m2 <- coxph(Surv(time_to_death, status)~treatment)
 
-anova(model3)
-tapply(predict(model3),bottleneck,mean)
+AIC(m1, m2) %>% compare_AICs()
+anova(m1, m2, test="Chisq")
+drop(m1)
 
-summary(glht(model3, linfct = mcp(bottleneck = "Tukey")))
+sresid <- resid(m1, type="schoenfeld")
+hist(sresid)
+summary(m.global)
 
-exp1.tukey <- summary(glht(model3, linfct = mcp(bottleneck = "Tukey")))
+tapply(predict(m.global),bottleneck,mean)
+
+summary(glht(m1, linfct = mcp(bottleneck = "Tukey")))
+
+exp1.tukey <- summary(glht(m1, linfct = mcp(bottleneck = "Tukey")))
 class(exp(exp1.tukey$test$coefficients))
 exp1.tukey
 exp1.tukey$test$coefficients
@@ -48,10 +70,10 @@ clip = pipe('pbcopy', 'w')
 write.table(exp1.HRs, file=clip, sep='\t', row.names = F, col.names = F)
 close(clip)
 
-plot(survfit(model3), xlim=c(0,5))
+plot(survfit(m.global), xlim=c(0,5))
 
 # Experiment 2
-phage<-read.csv("./Phage_bn_exp/data/counts/exp2.phage.surv.csv", header=T)
+phage<-read.csv("./Phage_bn_exp/original_data/survival.csv", header=T)
 phage$bottleneck %<>% as.factor()
 phage %<>% filter(bottleneck!="9")
 attach(phage)

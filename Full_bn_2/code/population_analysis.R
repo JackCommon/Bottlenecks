@@ -205,20 +205,28 @@ data$log.cfu <- log(data$cfu+1)
 #### Model - correlation between cfu and pfu ####
 
 m.null <- lmer(log.pfu~1+(1|replicate), data=data)
-m1 <- lmer(log.pfu~log.cfu+(1|replicate), data=data)
-m2 <- lmer(log.pfu~log.cfu*bottleneck+(1|replicate), data=data)
-m3 <- lmer(log.pfu~log.cfu*timepoint+(1|replicate), data=data)
+m1 <- lmer(log.pfu~bottleneck+(1|replicate), data=data)
+m2 <- lmer(log.pfu~timepoint+(1|replicate), data=data)
+m3 <- lmer(log.pfu~bottleneck*timepoint+(1|replicate), data=data)
+m4 <- lmer(log.pfu~log.cfu+(1|replicate), data=data)
+m5 <- lmer(log.pfu~log.cfu*bottleneck+(1|replicate), data=data)
+m6 <- lmer(log.pfu~log.cfu*timepoint+(1|replicate), data=data)
 m.global <- lmer(log.pfu~log.cfu*bottleneck*timepoint+(1|replicate), data=data)
 
 plot(m.null)
 plot(m1)
 plot(m2)
 plot(m3)
+plot(m4)
+plot(m5)
+plot(m6)
 plot(m.global)
 
-AIC(m.null, m1, m2, m3, m.global) %>% compare_AICs()
+AIC(m.null, m1, m2, m3, 
+    m4, m5, m6, m.global) %>% compare_AICs()
 
-anova(m.null, m1, m2, m3, m.global, test="F")
+anova(m.null, m1, m2, m3, 
+      m4, m5, m6, m.global, test="LRT")
 drop1(m.global, test="Chisq")
 
 summary(m.global)
@@ -306,20 +314,26 @@ cat('Coefficients copied to the clipboard')
 data_cont <- filter(data, bottleneck%in%c("c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9"))
 
 m.null <- lmer(log.pfu~1+(1|replicate), data=data_cont)
-m1 <- lmer(log.pfu~log.cfu+(1|replicate), data=data_cont)
-m2 <- lmer(log.pfu~log.cfu*bottleneck+(1|replicate), data=data_cont)
-m3 <- lmer(log.pfu~log.cfu*timepoint+(1|replicate), data=data_cont)
+m1 <- lmer(log.pfu~bottleneck+(1|replicate), data=data_cont)
+m2 <- lmer(log.pfu~timepoint+(1|replicate), data=data_cont)
+m3 <- lmer(log.pfu~bottleneck*timepoint+(1|replicate), data=data_cont)
+m4 <- lmer(log.pfu~log.cfu+(1|replicate), data=data_cont)
+m5 <- lmer(log.pfu~log.cfu*bottleneck+(1|replicate), data=data_cont)
+m6 <- lmer(log.pfu~log.cfu*timepoint+(1|replicate), data=data_cont)
 m.global <- lmer(log.pfu~log.cfu*bottleneck*timepoint+(1|replicate), data=data_cont)
 
 plot(m.null)
 plot(m1)
 plot(m2)
 plot(m3)
+plot(m4)
+plot(m5)
+plot(m6)
 plot(m.global)
 
-AIC(m.null, m1, m2, m3, m.global) %>% compare_AICs()
+AIC(m.null, m1, m2, m3, m4, m5, m6, m.global) %>% compare_AICs()
 
-anova(m.null, m1, m2, m3, m.global, test="F")
+anova(m.null, m1, m2, m3, m4, m5, m6, m.global, test="F")
 drop1(m.global, test="Chisq")
 
 # PFU covaries with CFU in the control data, but not in the experimental data
@@ -328,18 +342,24 @@ drop1(m.global, test="Chisq")
 data_exp <-  filter(data, bottleneck%in%c(seq(2,9,1)))
 
 m.null <- lmer(log.pfu~1+(1|replicate), data=data_exp)
-m1 <- lmer(log.pfu~log.cfu+(1|replicate), data=data_exp)
-m2 <- lmer(log.pfu~log.cfu*bottleneck+(1|replicate), data=data_exp)
-m3 <- lmer(log.pfu~log.cfu*timepoint+(1|replicate), data=data_exp)
+m1 <- lmer(log.pfu~bottleneck+(1|replicate), data=data_exp)
+m2 <- lmer(log.pfu~timepoint+(1|replicate), data=data_exp)
+m3 <- lmer(log.pfu~bottleneck*timepoint+(1|replicate), data=data_exp)
+m4 <- lmer(log.pfu~log.cfu+(1|replicate), data=data_exp)
+m5 <- lmer(log.pfu~log.cfu*bottleneck+(1|replicate), data=data_exp)
+m6 <- lmer(log.pfu~log.cfu*timepoint+(1|replicate), data=data_exp)
 m.global <- lmer(log.pfu~log.cfu*bottleneck*timepoint+(1|replicate), data=data_exp)
 
 plot(m.null)
 plot(m1)
 plot(m2)
 plot(m3)
+plot(m4)
+plot(m5)
+plot(m6)
 plot(m.global)
 
-AIC(m.null, m1, m2, m3, m.global) %>% compare_AICs()
+AIC(m.null, m1, m2, m3, m4, m5, m6, m.global) %>% compare_AICs()
 
 sresid <- resid(m.global, type = "pearson")  # Extract the standardised residuals
 hist(sresid)
@@ -347,7 +367,7 @@ hist(sresid)
 par(mfrow=c(1,2))
 plot(sresid ~ data_exp$bottleneck*data_exp$timepoint) 
 
-anova(m.null, m1, m2, m3, m.global, test="F")
+anova(m.null, m1, m2, m3, m4, m5, m6, m.global, test="F")
 drop1(m.global, test="Chisq")
 summary(m.global)
 r.squaredGLMM(m.global)
@@ -645,21 +665,25 @@ phage_plot <- ggplot(aes(y=pfu, x=timepoint, group=treatment),
   theme(axis.text = element_text(size=12))+
   theme(legend.text = element_text(size=12))+
 
-  geom_hline(yintercept = 1e+2, linetype=2, colour="red")+
-  annotate("text", 1.5, 1e+2, vjust=-1, label="Phage detection limit", colour="red")
+  #geom_hline(yintercept = 1e+2, linetype=2, colour="red")+
+  #annotate("text", 1.5, 1e+2, vjust=-1, label="Phage detection limit", colour="red")+
+  NULL
 quartz()
 phage_plot
+
+ggsave("phage_summary.png", phage_plot, path="./Revisions/",
+       device="png", dpi=300, width=27, height=20, unit=c("cm"))
 
 host_plot <- ggplot(aes(y=cfu+1, x=timepoint, group=treatment), 
                      data=data)+
   
   geom_path(stat='identity', 
-            aes(linetype=treatment),
+            aes(colour=treatment),
             position=pd)+
   geom_point(stat='identity', 
-             aes(shape=treatment),
+             aes(colour=treatment),
              position=pd)+
-  geom_errorbar(stat="identity", aes(ymin=cfu.lower+1, ymax=cfu.upper+1),
+  geom_errorbar(stat="identity", aes(ymin=cfu.lower+1, ymax=cfu.upper+1, colour=treatment),
                 position=pd, width=0)+
   
   labs(x='Days post-infection (d.p.i.)', y=expression(bold("C.f.u. ml"*{}^{-1}*"")))+
@@ -683,6 +707,10 @@ host_plot <- ggplot(aes(y=cfu+1, x=timepoint, group=treatment),
                      labels = trans_format('log10', math_format(10^.x)))+
   
   theme(axis.text = element_text(size=12))+
-  theme(legend.text = element_text(size=12))
+  theme(legend.text = element_text(size=12))+
+  NULL
 quartz()
 host_plot
+
+ggsave("host_summary.png", host_plot, path="./Revisions/",
+       device="png", dpi=300, width=27, height=20, unit=c("cm"))

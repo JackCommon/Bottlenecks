@@ -11,8 +11,9 @@ library(dplyr)
 library(tidyr)
 library(magrittr)
 library(cowplot)
+library(lme4)
 
-#### AIC comparison function ####
+#### Functions ####
 compare_AICs = function(df){          # df is a dataframe of AIC values 
   print(df)                           # prints the origina AIC values 
   col_len = length(df[,2])            # extracts the number of number of models
@@ -44,10 +45,14 @@ CopyCIs <- function(model){
 }
 
 # Data ####
-pheno <- read.csv('./Revisions/original_data/dilution_phenotype.csv', header=T)
+pheno <- read.csv('./Revisions/original_data/dilution_pheno_comp.csv', header=T)
 pheno <- melt(pheno, measure.vars = c('CRISPR', 'SM', 'Sensitive'))
 pheno$Replicate %<>% as.factor()
 pheno$Clone %<>% as.factor
+pheno$treatment %<>% relevel(ref="6")
+pheno$treatment %<>% relevel(ref="L")
+pheno$treatment %<>% relevel(ref="4")
+pheno$treatment %<>% relevel(ref="S")
 pheno %<>% plyr::rename(c("variable"="phenotype"))
 
 # Binomial GLMs ####
@@ -55,12 +60,18 @@ m.null <- glm(value~1, data=pheno, family=binomial)
 m1 <- glm(value~treatment, data=pheno, family=binomial)
 m2 <- glm(value~phenotype, data=pheno, family=binomial)
 m.global <- glm(value~treatment*phenotype, data=pheno, family=binomial)
+me.global <- glmer(value~treatment*phenotype+(1|Replicate), data=pheno, family=binomial)
 
 par(mfrow=c(2,2))
 plot(m.null)
 plot(m1)
 plot(m2)
 plot(m.global)
+plot(me.global)
+
+par(mfrow=c(1,1))
+sresid <- resid(me.global, type="pearson")
+hist(sresid)
 
 # Compare using AIC and ANOVA
 AIC(m.null, m1, m2, m.global) %>% compare_AICs()
@@ -73,19 +84,20 @@ confint(mod.g)
 model.tables(aov(m.global), "mean")
 
 # Confidence intervals
-pheno$variable %<>% relevel(ref="SM")
-pheno$variable %<>% relevel(ref="Sensitive")
-pheno$variable %<>% relevel(ref="CRISPR")
+pheno$phenotype %<>% relevel(ref="SM")
+pheno$phenotype %<>% relevel(ref="Sensitive")
+pheno$phenotype %<>% relevel(ref="CRISPR")
 
-pheno$bottleneck %<>% relevel(ref="50-clone")
-pheno$bottleneck %<>% relevel(ref="5-clone")
-pheno$bottleneck %<>% relevel(ref="1-clone")
+pheno$treatment %<>% relevel(ref="6")
+pheno$treatment %<>% relevel(ref="4")
+pheno$treatment %<>% relevel(ref="L")
+pheno$treatment %<>% relevel(ref="S")
 
-mod.g <- glm(value~bottleneck*variable, data=pheno, family=binomial)
+mod.g <- glm(value~treatment*phenotype, data=pheno, family=binomial)
 
 logit2prob(confint(mod.g))
 
-### Summary figures
+### Summary figures ####
 OG_genotypes = c('prop.CRISPR', 'prop.SM', 'prop.Sensitive')
 genotype_names_facet = list(
   'prop.CRISPR' = 'CRISPR',
@@ -99,17 +111,22 @@ genotype_labeller = function(variable, value) {
   return(genotype_names_facet[value])
 }
 
-pheno_sum <- read.csv('./Plate_bn_exp_2/summary_data/phenotype_summary.csv')
-pheno_sum %<>% na.exclude()
-pheno_sum$variable %<>% relevel(., ref='Sensitive')
-pheno_sum$variable %<>% relevel(., ref='SM')
-pheno_sum$variable %<>% relevel(., ref='CRISPR')
+pheno_sum <- read.csv('./Revisions/summary_data/dilution_pheno_summary.csv')
+#pheno_sum %<>% na.exclude()
+pheno_sum$phenotype %<>% relevel(., ref='SM')
+pheno_sum$phenotype %<>% relevel(., ref='Sensitive')
+pheno_sum$phenotype %<>% relevel(., ref='CRISPR')
+pheno_sum$treatment %<>% relevel(ref="L")
+pheno_sum$treatment %<>% relevel(ref="6")
+pheno_sum$treatment %<>% relevel(ref="S")
+pheno_sum$treatment %<>% relevel(ref="4")
 
-pheno_sum_fig <- ggplot(aes(y=mean, x=bottleneck, group=variable), data=pheno_sum)+
-  geom_bar(aes(fill=variable), stat='identity', size=3.5, position=position_dodge(1))+
+pheno_sum_fig <- ggplot(aes(y=mean, x=treatment, group=phenotype), data=pheno_sum)+
+  geom_bar(aes(fill=phenotype), stat='identity', size=3.5, position=position_dodge(1))+
   geom_errorbar(aes(ymin=lower, ymax=upper), width=0.3, size=0.7, position=position_dodge(1))+
   
   labs(x='Bottleneck', y='Proportion')+
+  ggtitle("Proportion of different immune phenotypes compared between\nculture & phage bottleneck experiment vs. dilution experiment\n(10^-6 phage)")+
   
   theme_bw()+
   theme(plot.title = element_text(face="bold", hjust=0.5, size = 16))+
@@ -120,12 +137,17 @@ pheno_sum_fig <- ggplot(aes(y=mean, x=bottleneck, group=variable), data=pheno_su
   theme(legend.key.width = unit(1, 'cm'))+
   theme(legend.key.height = unit(0.8, 'cm'))+
   theme(legend.text = element_text(size=11))+
-  
-  scale_x_discrete(breaks=plate_OG_bottleneck, labels=plate_bottleneck_names_legend)+
   theme(axis.text = element_text(size=12))+
   
   scale_fill_manual(name='Genotype',
                     breaks = c('CRISPR', "Sensitive", "SM"),
                     labels = c("CRISPR", "Sensitive", "SM"),
-                    values = c("#F8766D", "#619CFF", "#00BA38"))
+                    values = c("#F8766D","#00BA38", "#619CFF"))+
+  scale_x_discrete(breaks=c("4", "S", "6", "L"),
+                   labels=c(expression('10'^-4*''), "Small", expression("10"^-6*""), "Large"))+
+  coord_cartesian(ylim=c(0,1))+
+  NULL
 pheno_sum_fig
+
+ggsave("dil_exp_pheno_comp.png", pheno_sum_fig, path="./Revisions/figs",
+       device="png", dpi=300, width=22, height=15, unit=c("cm"))

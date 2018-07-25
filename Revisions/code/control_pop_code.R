@@ -167,7 +167,7 @@ phageneg_plot <- ggplot(aes(y=cfu+1, x=timepoint, group=newID),
              position=pd)+
 
   labs(x='Days post-infection (d.p.i.)', y=expression(bold("C.f.u. ml"*{}^{-1}*"")))+
-  ggtitle('')+
+  ggtitle("Host population dynamics in the ∆phage control")+
   #facet_grid(~treatment)+
   
   theme_cowplot()+
@@ -205,7 +205,7 @@ CRneg_phage_plot <- ggplot(aes(y=pfu+1, x=timepoint, group=newID),
              position=pd)+
   
   labs(x='Days post-infection (d.p.i.)', y=expression(bold("P.f.u. ml"*{}^{-1}*"")))+
-  ggtitle('')+
+  ggtitle('Phage population dynamics in the ∆CRISPR control')+
   #facet_grid(~treatment)+
   
   theme_cowplot()+
@@ -230,7 +230,7 @@ CRneg_phage_plot <- ggplot(aes(y=pfu+1, x=timepoint, group=newID),
 quartz()
 CRneg_phage_plot
 
-#### CR-ve CFU raw plot
+#### CR-ve CFU raw plot ####
 CRneg_host_plot <- ggplot(aes(y=cfu+1, x=timepoint, group=newID), 
                            data=CRneg)+
   
@@ -243,7 +243,7 @@ CRneg_host_plot <- ggplot(aes(y=cfu+1, x=timepoint, group=newID),
              position=pd)+
   
   labs(x='Days post-infection (d.p.i.)', y=expression(bold("C.f.u. ml"*{}^{-1}*"")))+
-  ggtitle('')+
+  ggtitle("Host population dynamics in the ∆CRISPR control ")+
   #facet_grid(~treatment)+
   
   theme_cowplot()+
@@ -268,3 +268,24 @@ CRneg_host_plot <- ggplot(aes(y=cfu+1, x=timepoint, group=newID),
 quartz()
 CRneg_host_plot
 
+ggsave
+
+
+#### Phage negative CFU analysis ####
+phageneg$log.cfu <- log(phageneg$cfu+1)
+
+m.null <- lmer(log.cfu~1+(1|ID), data=phageneg)
+m1 <- lmer(log.cfu~bottleneck+(1|ID), data=phageneg)
+m2 <- lmer(log.cfu~timepoint+(1|ID), data=phageneg)
+m3 <- lmer(log.cfu~bottleneck*timepoint+(1|ID), data=phageneg)
+
+plot(m.null)
+plot(m1)
+plot(m2)
+plot(m3)
+
+AIC(m.null, m1, m2, m3) %>% compare_AICs()
+anova(m.null, m1, m2, m3, test="F")
+drop1(m3, test="Chisq")
+summary(m3)
+confint(m3, parm="beta_")

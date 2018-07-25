@@ -122,8 +122,8 @@ timepoint_labeller = function(variable, value) {
 pd <- position_dodge(0.1)
 
 #### Load and format data ####
-data <- read.csv("./Revisions/original_data/dilution_counts.csv", header = T)
-data <- select(data, -raw, -dilution, -MOI)
+data <- read.csv("./Revisions/original_data/dilution_counts_106phage.csv", header = T)
+data <- select(data, -raw, -dilution, -MOI, -X)
 data$ID %<>% as.factor()
 data %<>% na.exclude
 #$log.pfu <- log10(phage$pfu+1)
@@ -146,6 +146,12 @@ ID2 <- c(phageIDs, hostIDs)
 dataM$ID2 <- as.factor(ID2)
 
 ## Raw figure ####
+treat_names <- list("S"="Small",
+                    "L"="Large")
+treat_labeller <- function(variable,value){
+  return(treat_names[value])
+}
+
 raw_plot <- ggplot(aes(y=value+1, x=timepoint, group=ID2), 
                     data=dataM)+
   
@@ -174,7 +180,7 @@ raw_plot <- ggplot(aes(y=value+1, x=timepoint, group=ID2),
   
   labs(x='Days post-infection (d.p.i.)', y=expression(bold("P.f.u. ml"*{}^{-1}*"/ C.f.u. ml"*{}^{-1}*"")))+
   ggtitle('')+
-  facet_grid(~treatment)+
+  facet_grid(~treatment, labeller = treat_labeller)+
   
   theme_cowplot()+
   theme(plot.title = element_text(face="bold", hjust=0, size = 16))+
@@ -196,6 +202,13 @@ raw_plot <- ggplot(aes(y=value+1, x=timepoint, group=ID2),
   theme(legend.text = element_text(size=12))+
   
   geom_hline(yintercept = 1e+2, linetype=2, colour="red")+
-  annotate("text", 1.5, 1e+2, vjust=-1, label="Phage detection limit", colour="red")
+  annotate("text", 1.5, 1e+2, vjust=-1, label="Phage detection limit", colour="red")+
+  NULL
 quartz()
 raw_plot
+
+ggsave("dil_dynamics.png", raw_plot, path="./Revisions/figs/",
+       device="png", dpi=300,
+       width=30, height=15, units=c("cm"))
+
+

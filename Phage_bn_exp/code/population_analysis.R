@@ -197,20 +197,26 @@ data$log.cfu <- log(data$cfu+1)
 #### Model - correlation between cfu and pfu ####
 
 m.null <- lmer(log.pfu~1+(1|replicate), data=data)
-m1 <- lmer(log.pfu~log.cfu+(1|replicate), data=data)
-m2 <- lmer(log.pfu~log.cfu*bottleneck+(1|replicate), data=data)
-m3 <- lmer(log.pfu~log.cfu*timepoint+(1|replicate), data=data)
+m1 <- lmer(log.pfu~bottleneck+(1|replicate), data=data)
+m2 <- lmer(log.pfu~timepoint+(1|replicate), data=data)
+m3 <- lmer(log.pfu~bottleneck*timepoint+(1|replicate), data=data)
+m4 <- lmer(log.pfu~log.cfu+(1|replicate), data=data)
+m5 <- lmer(log.pfu~log.cfu*bottleneck+(1|replicate), data=data)
+m6 <- lmer(log.pfu~log.cfu*timepoint+(1|replicate), data=data)
 m.global <- lmer(log.pfu~log.cfu*bottleneck*timepoint+(1|replicate), data=data)
 
 plot(m.null)
 plot(m1)
 plot(m2)
 plot(m3)
+plot(m4)
+plot(m5)
+plot(m6)
 plot(m.global)
 
-AIC(m.null, m1, m2, m3, m.global) %>% compare_AICs()
+AIC(m.null, m1, m2, m3, m4, m5, m6, m.global) %>% compare_AICs()
 
-anova(m.null, m1, m2, m3, m.global, test="F")
+anova(m.null, m1, m2, m3, m4, m5, m6, m.global, test="F")
 drop1(m.global, test="Chisq")
 sresid <- resid(m.global, type="pearson")
 hist(sresid)
@@ -400,7 +406,7 @@ quartz()
 raw_plot
 
 #### Summary figure - data formatting ####
-data <- read.csv("./Phage_bn_exp/data/counts/counts_summary_nbinom.csv")
+data <- read.csv("./Phage_bn_exp/summary_data/population_summary.csv")
 
 dataM <- melt(data, measure.vars = c("pfu", "cfu"))
 dataM <- plyr::rename(dataM, c("variable"="measurement"))
